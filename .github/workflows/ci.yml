@@ -6,8 +6,24 @@ on:
     branches: [ "main", "master" ]
 
 jobs:
-  test-and-build:
+  test:
     runs-on: ubuntu-latest
+
+    services:
+      postgres_test:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: asset_db_test
+          POSTGRES_USER: admin_test
+          POSTGRES_PASSWORD: secret_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -16,6 +32,10 @@ jobs:
         with:
           go-version: '1.24'
       - name: Run tests
+        # "Suntikkan" secret sebagai environment variable di sini
+        env:
+          DATABASE_URL: postgres://admin_test:secret_test@localhost:5433/asset_db_test?sslmode=disable
+          JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
         run: go test -v ./...
       
       # Gabungkan build dan push ke dalam satu job
