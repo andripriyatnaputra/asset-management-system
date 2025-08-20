@@ -21,7 +21,7 @@ import (
 // TestMain akan berjalan sekali sebelum semua tes di paket ini dijalankan.
 func TestMain(m *testing.M) {
 	// Muat .env untuk mendapatkan JWT_SECRET_KEY
-	if err := godotenv.Load("../../.env"); err != nil {
+	if err := godotenv.Load("../../../.env"); err != nil {
 		log.Fatalf("Error loading .env file for testing. Make sure it exists at project root. Error: %v", err)
 	}
 
