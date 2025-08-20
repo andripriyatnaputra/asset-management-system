@@ -1,0 +1,42 @@
+// File: src/components/AssetTypeChart.tsx
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+
+interface ChartData { name: string; value: number; }
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF', '#FF1943'];
+
+const CustomTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-white p-2 border rounded shadow-lg">
+        <p className="label">{`${payload[0].name} : ${payload[0].value}`}</p>
+      </div>
+    );
+  }
+  return null;
+};
+
+interface AssetTypeChartProps {
+  data: ChartData[];
+}
+
+export default function AssetTypeChart({ data }: AssetTypeChartProps) {
+  if (!data || data.length === 0) {
+    return <div className="flex items-center justify-center h-full text-muted-foreground">Tidak ada data</div>;
+  }
+
+  return (
+    <div style={{ width: '100%', height: '100%' }}>
+    <ResponsiveContainer>
+      <PieChart>
+        <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} fill="#8884d8">
+          {data.map((_entry, index) => (
+            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+          ))}
+        </Pie>
+        <Tooltip content={<CustomTooltip />} />
+        <Legend />
+      </PieChart>
+    </ResponsiveContainer>
+   </div>
+  );
+}

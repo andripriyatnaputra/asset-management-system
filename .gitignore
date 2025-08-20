@@ -1,0 +1,16 @@
+# Dependencies
+/node_modules
+/frontend/node_modules
+
+# Build output
+/tmp
+
+# Log files
+*.log
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env

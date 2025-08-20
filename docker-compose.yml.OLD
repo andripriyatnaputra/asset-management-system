@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_DB=asset_db
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+  
+  db_test:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=admin_test
+      - POSTGRES_PASSWORD=secret_test
+      - POSTGRES_DB=asset_db_test
+    ports:
+      - '5433:5432'
+      
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - .env
+    ports:
+      - '8080:8080'
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgres://admin:secret@db:5432/asset_db?sslmode=disable
+    depends_on:
+      - db
+       
+volumes:
+  postgres_data:

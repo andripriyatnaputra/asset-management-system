@@ -1,0 +1,14 @@
+# Abaikan folder Git
+.git
+
+# Abaikan dependensi Node yang sangat besar
+frontend/node_modules
+node_modules
+
+# Abaikan folder build Go dan file-file sementara
+tmp
+*.log
+
+# Abaikan file sistem operasi
+.DS_Store
+Thumbs.db
