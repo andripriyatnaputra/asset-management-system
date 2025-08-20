@@ -32,7 +32,6 @@ jobs:
         with:
           go-version: '1.24'
       - name: Run tests
-        # "Suntikkan" secret sebagai environment variable di sini
         env:
           DATABASE_URL: postgres://admin_test:secret_test@localhost:5433/asset_db_test?sslmode=disable
           JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
