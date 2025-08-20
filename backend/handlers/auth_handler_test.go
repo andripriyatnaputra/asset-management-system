@@ -22,7 +22,7 @@ import (
 func TestMain(m *testing.M) {
 	// Muat .env untuk mendapatkan JWT_SECRET_KEY
 	if err := godotenv.Load("../.env"); err != nil {
-		log.Fatal("Error loading .env file for testing. Make sure it exists at project root. Error: %v", err)
+		log.Fatalf("Error loading .env file for testing. Make sure it exists at project root. Error: %v", err)
 	}
 
 	// Atur environment variable untuk koneksi ke database tes
