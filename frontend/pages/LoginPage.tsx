@@ -87,7 +87,7 @@ export default function LoginPage() {
         <div className="flex items-center justify-center h-full flex-col text-center p-8">
             <Package className="h-16 w-16 mb-4 text-primary" />
             <h2 className="text-3xl font-bold">IT Asset Management System</h2>
-            <p className="text-muted-foreground mt-2">Solusi terintegrasi untuk aset dan layanan IT Anda.</p>
+            <p className="text-muted-foreground mt-2">Solusi terintegrasi untuk aset dan layanan IT</p>
         </div>
       </div>
     </div>
