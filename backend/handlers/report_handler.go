@@ -14,11 +14,12 @@ import (
 )
 
 type AssetReportRow struct {
-	AssetName    string `json:"asset_name"`
-	AssetTag     string `json:"asset_tag"`
-	AssetType    string `json:"asset_type"`
-	EmployeeName string `json:"employee_name"`
-	EmployeeNIK  string `json:"employee_nik"`
+	AssetName    string    `json:"asset_name"`
+	AssetTag     string    `json:"asset_tag"`
+	AssetType    string    `json:"asset_type"`
+	EmployeeName string    `json:"employee_name"`
+	EmployeeNIK  string    `json:"employee_nik"`
+	AssignedAt   time.Time `json:"assigned_at"`
 }
 
 // GetAssetsByDepartmentReport generates a report of assets assigned to a department
@@ -83,4 +84,49 @@ func GetAssetsByDepartmentReport(c *gin.Context) {
 		// Jika tidak, kirim sebagai JSON biasa
 		c.JSON(http.StatusOK, results)
 	}
+}
+
+func GetAssetsByEmployeeReport(c *gin.Context) {
+	employeeIDStr := c.Query("employee_id")
+	if employeeIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "employee_id is required"})
+		return
+	}
+
+	query := `
+        SELECT 
+            a.name as asset_name,
+            a.asset_tag,
+            at.name as asset_type,
+            aa.assigned_at
+        FROM asset_assignments aa
+        JOIN assets a ON aa.asset_id = a.id
+        JOIN asset_types at ON a.asset_type_id = at.id
+        WHERE aa.employee_id = $1 AND aa.returned_at IS NULL AND a.deleted_at IS NULL
+        ORDER BY aa.assigned_at DESC`
+
+	rows, err := database.Pool.Query(context.Background(), query, employeeIDStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch report data"})
+		return
+	}
+	defer rows.Close()
+
+	// Kita gunakan map[string]interface{} agar lebih fleksibel
+	var results []map[string]interface{}
+	for rows.Next() {
+		var row AssetReportRow // Kita bisa pakai ulang struct yang ada
+		if err := rows.Scan(&row.AssetName, &row.AssetTag, &row.AssetType, &row.AssignedAt); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to scan report data"})
+			return
+		}
+		results = append(results, map[string]interface{}{
+			"asset_name":  row.AssetName,
+			"asset_tag":   row.AssetTag,
+			"asset_type":  row.AssetType,
+			"assigned_at": row.AssignedAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, results)
 }

@@ -58,6 +58,7 @@ func main() {
 			authenticated.POST("/tickets/:id/comments", handlers.AddCommentToTicket)
 			authenticated.GET("/dashboard/stats", handlers.GetDashboardStats)
 			authenticated.GET("/reports/assets-by-department", handlers.GetAssetsByDepartmentReport)
+			authenticated.GET("/reports/assets-by-employee", handlers.GetAssetsByEmployeeReport)
 
 			// --- PERBAIKAN DI SINI: Semua endpoint GET yang read-only ditaruh di sini ---
 			authenticated.GET("/assets", handlers.GetAllAssets)

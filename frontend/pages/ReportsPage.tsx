@@ -7,7 +7,8 @@ import { Button } from "../src/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../src/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../src/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../src/components/ui/table";
-import type { Department } from '../src/types'; // Impor tipe Department
+import type { Department } from '../src/types';
+import type { Employee } from '../src/types';
 
 interface AssetReportRow {
   asset_name: string;
@@ -22,10 +23,15 @@ export default function ReportsPage() {
   const [selectedDept, setSelectedDept] = useState<string>('');
   const [reportData, setReportData] = useState<AssetReportRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [selectedEmployee, setSelectedEmployee] = useState<string>('');
+  const [employeeReportData, setEmployeeReportData] = useState<any[]>([]);
+  const [isEmployeeReportLoading, setIsEmployeeReportLoading] = useState(false);
 
   // Ambil daftar departemen untuk dropdown saat komponen dimuat
   useEffect(() => {
     apiClient.get('/departments').then(res => setDepartments(res.data));
+    apiClient.get('/employees').then(res => setEmployees(res.data.data));
   }, []);
 
   const handleGenerateReport = () => {
@@ -41,6 +47,21 @@ export default function ReportsPage() {
       })
       .catch(() => toast.error('Gagal membuat laporan.'))
       .finally(() => setIsLoading(false));
+  };
+
+  const handleGenerateEmployeeReport = () => {
+    if (!selectedEmployee) {
+      toast.error('Silakan pilih karyawan terlebih dahulu.');
+      return;
+    }
+    setIsEmployeeReportLoading(true);
+    apiClient.get(`/reports/assets-by-employee?employee_id=${selectedEmployee}`)
+      .then(res => {
+        setEmployeeReportData(res.data);
+        toast.success('Laporan berhasil dibuat!');
+      })
+      .catch(() => toast.error('Gagal membuat laporan.'))
+      .finally(() => setIsEmployeeReportLoading(false));
   };
 
   const handleExportCSV = () => {
@@ -135,6 +156,54 @@ export default function ReportsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Laporan Aset per Karyawan</CardTitle>
+          <CardDescription>Pilih karyawan untuk melihat daftar aset yang sedang dipegang.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center space-x-2 mb-4">
+            <Select onValueChange={setSelectedEmployee}>
+              <SelectTrigger className="w-[280px]">
+                <SelectValue placeholder="Pilih Karyawan..." />
+              </SelectTrigger>
+              <SelectContent>
+                {employees.map(emp => (
+                  <SelectItem key={emp.id} value={emp.id.toString()}>{emp.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button onClick={handleGenerateEmployeeReport} disabled={isEmployeeReportLoading}>
+              {isEmployeeReportLoading ? 'Memuat...' : 'Tampilkan Laporan'}
+            </Button>
+          </div>
+
+          {employeeReportData.length > 0 && (
+            <div className="border rounded-md">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nama Aset</TableHead>
+                    <TableHead>Tag Aset</TableHead>
+                    <TableHead>Tanggal Diberikan</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {employeeReportData.map((row, index) => (
+                    <TableRow key={index}>
+                      <TableCell className="font-medium">{row.asset_name}</TableCell>
+                      <TableCell className="font-mono">{row.asset_tag}</TableCell>
+                      <TableCell>{new Date(row.assigned_at).toLocaleDateString('id-ID')}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      
     </div>
   );
 }
