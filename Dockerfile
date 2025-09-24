@@ -7,6 +7,8 @@ WORKDIR /app/frontend
 # Salin file package.json dan package-lock.json terlebih dahulu untuk caching
 COPY frontend/package*.json ./
 RUN npm install
+# Gunakan 'npm ci' untuk instalasi yang lebih cepat dan konsisten di CI/CD
+RUN npm ci
 # Salin sisa kode frontend
 COPY frontend/ ./
 # Jalankan perintah build untuk menghasilkan file statis
