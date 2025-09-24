@@ -152,7 +152,7 @@ CREATE TABLE audited_assets (
 -- --- Data Awal (Seeder Mini) ---
 
 -- Tambahkan beberapa departemen awal
-INSERT INTO departments (name) VALUES ('IT Infrastructure'), ('Software Development'), ('Finance'), ('Human Resources');
+INSERT INTO departments (name) VALUES ('Product Development'), ('Direksi'), ('HR & GA'), ('Finance & Acc'), ('Procurement & Logistic'), ('Sales & Marketing'), ('Operation & Maintenance');
 
 -- TAMBAHKAN DATA AWAL UNTUK TIPE ASET
 INSERT INTO asset_types (name) VALUES ('Laptop'), ('Monitor'), ('Server'), ('Keyboard'), ('Mouse'), ('Printer');
@@ -162,7 +162,7 @@ INSERT INTO employees (employee_nik, name, email, department_id, password_hash, 
 VALUES (
     'SUPERADMIN-001',
     'Super Admin',
-    'admin@example.com',
+    'admin.admin@example.com',
     1, -- Merujuk ke ID 'IT Infrastructure'
     '$2a$12$ULKxws0htrXha9KKlBDqpOaHGnVKjU3VYl9C87H7rraDYK0b2Iuey', -- Password: superadmin123
     'super_admin'

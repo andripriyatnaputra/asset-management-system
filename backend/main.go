@@ -59,6 +59,7 @@ func main() {
 			authenticated.GET("/dashboard/stats", handlers.GetDashboardStats)
 			authenticated.GET("/reports/assets-by-department", handlers.GetAssetsByDepartmentReport)
 			authenticated.GET("/reports/assets-by-employee", handlers.GetAssetsByEmployeeReport)
+			authenticated.GET("/reports/tickets-by-asset-type", handlers.GetTicketsByAssetTypeReport)
 
 			// --- PERBAIKAN DI SINI: Semua endpoint GET yang read-only ditaruh di sini ---
 			authenticated.GET("/assets", handlers.GetAllAssets)

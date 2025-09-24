@@ -130,3 +130,39 @@ func GetAssetsByEmployeeReport(c *gin.Context) {
 
 	c.JSON(http.StatusOK, results)
 }
+
+func GetTicketsByAssetTypeReport(c *gin.Context) {
+	query := `
+		SELECT 
+			at.name as asset_type,
+			COUNT(t.id) as ticket_count
+		FROM tickets t
+		JOIN assets a ON t.related_asset_id = a.id
+		JOIN asset_types at ON a.asset_type_id = at.id
+		WHERE t.deleted_at IS NULL
+		GROUP BY at.name
+		ORDER BY ticket_count DESC`
+
+	rows, err := database.Pool.Query(context.Background(), query)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch report data"})
+		return
+	}
+	defer rows.Close()
+
+	var results []map[string]interface{}
+	for rows.Next() {
+		var assetType string
+		var ticketCount int
+		if err := rows.Scan(&assetType, &ticketCount); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to scan report data"})
+			return
+		}
+		results = append(results, map[string]interface{}{
+			"asset_type":   assetType,
+			"ticket_count": ticketCount,
+		})
+	}
+
+	c.JSON(http.StatusOK, results)
+}

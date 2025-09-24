@@ -3,14 +3,12 @@ package main
 
 import (
 	"context"
+	"encoding/csv"
 	"fmt"
 	"log"
-	"math/rand"
-	"time"
+	"os"
 
 	"github.com/andripriyatnaputra/asset-management-system/backend/database"
-	"github.com/andripriyatnaputra/asset-management-system/backend/models"
-	"github.com/go-faker/faker/v4"
 	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -23,7 +21,7 @@ func main() {
 	database.Connect()
 	defer database.Pool.Close()
 
-	fmt.Println("Seeding departments...")
+	/*fmt.Println("Seeding departments...")
 	departments, err := seedAndGetDepartments()
 	if err != nil {
 		log.Fatalf("Failed to seed departments: %v", err)
@@ -55,11 +53,18 @@ func main() {
 		log.Fatalf("Failed to seed assignments: %v", err)
 	}
 
+	fmt.Println("Database seeding completed successfully! ✅")*/
+
+	fmt.Println("Importing employees from CSV...")
+	if err := importEmployeesFromCSV("cmd/seeder/employees.csv"); err != nil {
+		log.Fatalf("Failed to import employees from CSV: %v", err)
+	}
+
 	fmt.Println("Database seeding completed successfully! ✅")
 }
 
 // ... (seedAndGetDepartments dan seedAndGetAssetTypes tidak berubah) ...
-func seedAndGetDepartments() ([]models.Department, error) {
+/*func seedAndGetDepartments() ([]models.Department, error) {
 	deptNames := []string{"Marketing", "Sales", "Operations", "Legal"}
 	for _, name := range deptNames {
 		database.Pool.Exec(context.Background(), `INSERT INTO departments (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, name)
@@ -189,4 +194,52 @@ func seedAssignments(assets []models.Asset, employees []models.Employee) error {
 			WHERE aa.asset_id = a.id AND aa.returned_at IS NULL
 		)`)
 	return err
+}*/
+
+func importEmployeesFromCSV(filePath string) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	records, err := reader.ReadAll()
+	if err != nil {
+		return err
+	}
+
+	password := "starcoms2024" // Password default untuk semua user impor
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+
+	// Lewati baris header (records[0])
+	for _, record := range records[1:] {
+		name := record[1]
+		nik := record[2]
+		email := record[3]
+		departmentName := record[4]
+
+		// Dapatkan department_id dari namanya
+		var departmentID int64
+		database.Pool.QueryRow(context.Background(),
+			`INSERT INTO departments (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
+			departmentName).Scan(&departmentID)
+
+		// Tetapkan peran default
+		role := "employee"
+		if departmentName == "Direksi" {
+			role = "super_admin"
+		}
+
+		// Masukkan ke database
+		_, err := database.Pool.Exec(context.Background(),
+			`INSERT INTO employees (name, employee_nik, email, department_id, role, password_hash)
+			 VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (employee_nik) DO NOTHING`,
+			name, nik, email, departmentID, role, string(hashedPassword))
+
+		if err != nil {
+			log.Printf("Could not insert employee %s: %v", name, err)
+		}
+	}
+	return nil
 }
