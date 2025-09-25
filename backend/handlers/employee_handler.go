@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/csv"
 	"fmt"
 	"log"
 	"net/http"
@@ -272,4 +273,64 @@ func GetMyAssignedAssets(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, assets)
+}
+
+func ImportEmployeesFromCSV(c *gin.Context) {
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File is required"})
+		return
+	}
+
+	openedFile, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open file"})
+		return
+	}
+	defer openedFile.Close()
+
+	reader := csv.NewReader(openedFile)
+	records, err := reader.ReadAll()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read CSV file"})
+		return
+	}
+
+	password := "starcoms2024" // Password default
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+
+	var successfullyImported, failedCount int
+
+	// Lewati baris header
+	for _, record := range records[1:] {
+		name := record[1]
+		nik := record[2]
+		email := record[3]
+		departmentName := record[4]
+
+		var departmentID int64
+		database.Pool.QueryRow(context.Background(),
+			`INSERT INTO departments (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
+			departmentName).Scan(&departmentID)
+
+		role := "employee"
+		if departmentName == "Direktur" {
+			role = "super_admin"
+		}
+
+		_, err := database.Pool.Exec(context.Background(),
+			`INSERT INTO employees (name, employee_nik, email, department_id, role, password_hash)
+			 VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (employee_nik) DO NOTHING`,
+			name, nik, email, departmentID, role, string(hashedPassword))
+
+		if err == nil {
+			successfullyImported++
+		} else {
+			failedCount++
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf("Import finished. %d records successfully imported, %d records failed.", successfullyImported, failedCount),
+	})
 }

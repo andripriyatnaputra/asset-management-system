@@ -1,17 +1,18 @@
 // File: src/pages/EmployeesPage.tsx
-import { useEmployeeLogic } from '../hooks/useEmployeeLogic'; // Perbaikan path import
+import { useEmployeeLogic } from '@/hooks/useEmployeeLogic'; // Menggunakan alias
 import { useEffect, useState } from 'react';
-import apiClient from '../src/services/api'; // Perbaikan path import
+import apiClient from '@/services/api'; // Menggunakan alias
 
-import { Button } from "../src/components/ui/button";
-import { Input } from '../src/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../src/components/ui/table";
-import { Badge } from "../src/components/ui/badge"; // Impor Badge yang terlewat
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../src/components/ui/select';
-import { Pagination } from '../src/components/ui/pagination'; // Perbaikan path import
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../src/components/ui/alert-dialog"; // Perbaikan path import
-import EmployeeFormModal from '../src/components/EmployeeFormModal'; // Perbaikan path import
-import type { Department } from '../src/types'; // Perbaikan path import
+import { Button } from "@/components/ui/button";
+import { Input } from '@/components/ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Pagination } from '@/components/ui/pagination';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import EmployeeFormModal from '@/components/EmployeeFormModal';
+import type { Department } from '@/types';
+import ImportEmployeeModal from '@/components/ImportEmployeeModal';
 
 export default function EmployeesPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -21,7 +22,15 @@ export default function EmployeesPage() {
     searchTerm, setSearchTerm, selectedDept, setSelectedDept,
     handleOpenModal, handleCloseModal, handleSuccess, handleDeleteClick, handleConfirmDelete, handleSort,
     setCurrentPage,
+    fetchEmployees,
   } = useEmployeeLogic();
+
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  const handleImportSuccess = () => {
+    setIsImportModalOpen(false);
+    fetchEmployees(); // Refresh daftar
+  }
 
   useEffect(() => {
     apiClient.get('/departments').then(res => setDepartments(res.data));
@@ -31,7 +40,10 @@ export default function EmployeesPage() {
     <div className="container mx-auto py-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Manajemen Karyawan</h1>
-        <Button onClick={() => handleOpenModal(null)}>+ Tambah Karyawan</Button>
+        <div className="flex space-x-2">
+          <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>Impor dari CSV</Button>
+          <Button onClick={() => handleOpenModal(null)}>+ Tambah Karyawan</Button>
+        </div>
       </div>
 
       <div className="bg-white p-4 mb-6 border rounded-lg flex flex-wrap items-center justify-between gap-4">
@@ -102,6 +114,12 @@ export default function EmployeesPage() {
         onClose={handleCloseModal}
         onSuccess={handleSuccess}
         employee={editingEmployee}
+      />
+
+      <ImportEmployeeModal 
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onSuccess={handleImportSuccess}
       />
 
       <AlertDialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>

@@ -90,6 +90,7 @@ func main() {
 			adminOnly.POST("/employees", handlers.CreateEmployee)
 			adminOnly.PUT("/employees/:id", handlers.UpdateEmployee)
 			adminOnly.DELETE("/employees/:id", handlers.DeleteEmployee)
+			adminOnly.POST("/employees/import", handlers.ImportEmployeesFromCSV)
 			adminOnly.POST("/departments", handlers.CreateDepartment)
 			adminOnly.PUT("/departments/:id", handlers.UpdateDepartment)
 			adminOnly.DELETE("/departments/:id", handlers.DeleteDepartment)
