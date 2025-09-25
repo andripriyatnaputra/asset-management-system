@@ -3,8 +3,9 @@ import axios from 'axios';
 
 // Buat instance Axios dengan konfigurasi dasar
 const apiClient = axios.create({
-  baseURL: 'http://202.50.203.142:8080/api/v1', // URL dasar backend kita
+  //baseURL: 'http://202.50.203.142:8080/api/v1', // URL dasar backend kita
   //baseURL: '/api/v1',
+  baseURL: import.meta.env.VITE_API_BASE_URL,
 });
 
 // Ini adalah "interceptor", sebuah fungsi yang akan dijalankan SEBELUM setiap request dikirim.
