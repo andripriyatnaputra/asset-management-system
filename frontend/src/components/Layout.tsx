@@ -16,7 +16,8 @@ export default function Layout() {
       const token = localStorage.getItem('authToken');
       if (!token) return;
 
-      const wsUrl = `ws://localhost:8080/api/v1/ws?token=${token}`;
+      //const wsUrl = `ws://localhost:8080/api/v1/ws?token=${token}`;
+      const wsUrl = `ws://202.50.203.142:8080/api/v1/ws?token=${token}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws; // Simpan koneksi di ref
 
