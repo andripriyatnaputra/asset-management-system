@@ -21,7 +21,8 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const response = await axios.post('http://localhost:8080/api/v1/auth/login', { email, password });
+      //const response = await axios.post('http://localhost:8080/api/v1/auth/login', { email, password });
+      const response = await axios.post('http://202.50.203.142:8080/api/v1/auth/login', { email, password });
       const { token } = response.data;
       localStorage.setItem('authToken', token);
       navigate('/');
