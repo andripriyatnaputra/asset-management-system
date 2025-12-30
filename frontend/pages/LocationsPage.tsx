@@ -25,7 +25,6 @@ export default function LocationsPage() {
   const [sortAsc, setSortAsc] = useState(true)
   const [pageSize, setPageSize] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
-  const [, setPage] = useState(1)
   const [formOpen, setFormOpen] = useState(false)
   const [editItem, setEditItem] = useState<Location | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -35,9 +34,13 @@ export default function LocationsPage() {
     setLoading(true)
     try {
       const res = await apiClient.get("/locations")
-      const data = Array.isArray(res.data.data) ? res.data.data : res.data
-      setList(data)
+
+      const raw = res.data?.data ?? res.data
+      const safeData: Location[] = Array.isArray(raw) ? raw : []
+
+      setList(safeData)
     } catch {
+      setList([]) // ⬅️ penting
       toast.error("Gagal memuat data lokasi.")
     } finally {
       setLoading(false)
@@ -47,18 +50,24 @@ export default function LocationsPage() {
   useEffect(() => { fetchData() }, [])
 
   const filtered = useMemo(() => {
+    if (!Array.isArray(list)) return []
+
     const q = search.toLowerCase()
-    let result = list.filter(
-      l =>
-        l.site.toLowerCase().includes(q) ||
-        (l.building ?? "").toLowerCase().includes(q) ||
-        (l.room ?? "").toLowerCase().includes(q)
+    let result = list.filter(l =>
+      l.site?.toLowerCase().includes(q) ||
+      (l.building ?? "").toLowerCase().includes(q) ||
+      (l.room ?? "").toLowerCase().includes(q)
     )
-    result.sort((a, b) => sortAsc
-      ? a.site.localeCompare(b.site)
-      : b.site.localeCompare(a.site))
+
+    result.sort((a, b) =>
+      sortAsc
+        ? a.site.localeCompare(b.site)
+        : b.site.localeCompare(a.site)
+    )
+
     return result
   }, [list, search, sortAsc])
+
 
   const totalPages = Math.ceil(filtered.length / pageSize)
   const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)
@@ -204,7 +213,7 @@ export default function LocationsPage() {
               value={String(pageSize)}
               onValueChange={(v) => {
                 setPageSize(Number(v))
-                setPage(1)
+                setCurrentPage(1)
               }}
             >
               <SelectTrigger
