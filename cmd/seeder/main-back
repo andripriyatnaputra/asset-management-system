@@ -1,0 +1,243 @@
+// File: cmd/seeder/main.go
+package main
+
+import (
+	"context"
+	"encoding/csv"
+	"log"
+	"os"
+
+	"github.com/andripriyatnaputra/asset-management-system/backend/database"
+	"golang.org/x/crypto/bcrypt"
+)
+
+/*func main() {
+_ = godotenv.Load()
+
+// ... (bagian ini tidak berubah) ...
+fmt.Println("Starting database seeder...")
+database.Connect()
+defer database.Pool.Close()
+
+/*fmt.Println("Seeding departments...")
+departments, err := seedAndGetDepartments()
+if err != nil {
+	log.Fatalf("Failed to seed departments: %v", err)
+}
+
+fmt.Println("Seeding asset types...")
+assetTypes, err := seedAndGetAssetTypes()
+if err != nil {
+	log.Fatalf("Failed to seed asset types: %v", err)
+}
+
+fmt.Println("Seeding employees...")
+employees, err := seedEmployees(departments)
+if err != nil {
+	log.Fatalf("Failed to seed employees: %v", err)
+}
+if len(employees) == 0 {
+	log.Println("Warning: No employees were seeded. Assignments will be skipped.")
+}
+
+fmt.Println("Seeding assets...")
+assets, err := seedAssets(assetTypes)
+if err != nil {
+	log.Fatalf("Failed to seed assets: %v", err)
+}
+
+fmt.Println("Seeding asset assignments...")
+if err := seedAssignments(assets, employees); err != nil {
+	log.Fatalf("Failed to seed assignments: %v", err)
+}
+
+fmt.Println("Database seeding completed successfully! ✅")*/
+
+/*fmt.Println("Importing employees from CSV...")
+	if err := importEmployeesFromCSV("cmd/seeder/employees.csv"); err != nil {
+		log.Fatalf("Failed to import employees from CSV: %v", err)
+	}
+
+	fmt.Println("Database seeding completed successfully! ✅")
+}*/
+
+// ... (seedAndGetDepartments dan seedAndGetAssetTypes tidak berubah) ...
+/*func seedAndGetDepartments() ([]models.Department, error) {
+	deptNames := []string{"Marketing", "Sales", "Operations", "Legal"}
+	for _, name := range deptNames {
+		database.Pool.Exec(context.Background(), `INSERT INTO departments (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, name)
+	}
+	departments := []models.Department{}
+	rows, err := database.Pool.Query(context.Background(), "SELECT id, name FROM departments")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var d models.Department
+		rows.Scan(&d.ID, &d.Name)
+		departments = append(departments, d)
+	}
+	return departments, nil
+}
+func seedAndGetAssetTypes() ([]models.AssetType, error) {
+	typeNames := []string{"Desktop PC", "VoIP Phone", "Tablet", "Projector"}
+	for _, name := range typeNames {
+		database.Pool.Exec(context.Background(), `INSERT INTO asset_types (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, name)
+	}
+	assetTypes := []models.AssetType{}
+	rows, err := database.Pool.Query(context.Background(), "SELECT id, name FROM asset_types")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var at models.AssetType
+		rows.Scan(&at.ID, &at.Name)
+		assetTypes = append(assetTypes, at)
+	}
+	return assetTypes, nil
+}
+
+// --- Perubahan utama ada di sini ---
+func seedEmployees(departments []models.Department) ([]models.Employee, error) {
+	password := "password123"
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	employees := []models.Employee{}
+
+	for i := 0; i < 50; i++ {
+		var emp models.Employee
+		randomDept := departments[rand.Intn(len(departments))]
+
+		emp.Name = faker.Name()
+		emp.Email = fmt.Sprintf("employee%d@example.com", i+1)
+		emp.EmployeeNIK = fmt.Sprintf("EMP-%d", 1000+i)
+		emp.DepartmentID = &randomDept.ID
+		emp.Role = "employee"
+		emp.PasswordHash = string(hashedPassword)
+
+		query := `INSERT INTO employees (employee_nik, name, email, department_id, password_hash, role)
+				  VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
+
+		err := database.Pool.QueryRow(context.Background(), query,
+			emp.EmployeeNIK, emp.Name, emp.Email, emp.DepartmentID, emp.PasswordHash, emp.Role).Scan(&emp.ID)
+
+		if err != nil {
+			// **TAMBAHAN LOGGING UNTUK MELACAK ERROR**
+			log.Printf("Could not insert employee %s: %v", emp.Email, err)
+			continue // Lanjutkan ke iterasi berikutnya jika ada error
+		}
+		employees = append(employees, emp)
+	}
+	return employees, nil
+}
+
+// ... (seedAssets tidak berubah) ...
+func seedAssets(assetTypes []models.AssetType) ([]models.Asset, error) {
+	assets := []models.Asset{}
+	for i := 0; i < 200; i++ {
+		var asset models.Asset
+		randomType := assetTypes[rand.Intn(len(assetTypes))]
+		asset.Name = fmt.Sprintf("Aset-%d", i+1)
+		asset.AssetTag = faker.UUIDHyphenated()
+		asset.Status = "In Stock"
+		asset.AssetTypeID = &randomType.ID
+		daysAgo := rand.Intn(3 * 365)
+		asset.PurchaseDate = time.Now().AddDate(0, 0, -daysAgo)
+		asset.InitialPrice = float64(rand.Intn(20000000) + 500000)
+		err := database.Pool.QueryRow(context.Background(),
+			`INSERT INTO assets (name, asset_tag, status, asset_type_id, purchase_date, initial_price, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (asset_tag) DO NOTHING RETURNING id`,
+			asset.Name, asset.AssetTag, asset.Status, asset.AssetTypeID, asset.PurchaseDate, asset.InitialPrice, time.Now(), time.Now()).Scan(&asset.ID)
+		if err == nil {
+			assets = append(assets, asset)
+		}
+	}
+	return assets, nil
+}
+
+func seedAssignments(assets []models.Asset, employees []models.Employee) error {
+	if len(assets) == 0 || len(employees) == 0 {
+		return nil // Tidak ada yang perlu di-assign
+	}
+	for i := 0; i < 300; i++ {
+		randomAsset := assets[rand.Intn(len(assets))]
+		randomEmployee := employees[rand.Intn(len(employees))]
+
+		daysAfterPurchase := rand.Intn(30) + 1
+		assignedDate := randomAsset.PurchaseDate.AddDate(0, 0, daysAfterPurchase)
+
+		var returnedDate *time.Time
+		if rand.Intn(10) < 7 {
+			daysAfterAssigned := rand.Intn(365) + 1
+			rt := assignedDate.AddDate(0, 0, daysAfterAssigned)
+			returnedDate = &rt
+		}
+
+		_, err := database.Pool.Exec(context.Background(),
+			`INSERT INTO asset_assignments (asset_id, employee_id, assigned_at, returned_at, notes)
+			 VALUES ($1, $2, $3, $4, $5)`,
+			randomAsset.ID, randomEmployee.ID, assignedDate, returnedDate, faker.Sentence())
+		if err != nil {
+			// **TAMBAHAN LOGGING UNTUK MELACAK ERROR**
+			log.Printf("Could not create assignment for asset %d: %v", randomAsset.ID, err)
+			continue
+		}
+	}
+
+	_, err := database.Pool.Exec(context.Background(), `
+		UPDATE assets a SET status = 'Assigned'
+		WHERE EXISTS (
+			SELECT 1 FROM asset_assignments aa
+			WHERE aa.asset_id = a.id AND aa.returned_at IS NULL
+		)`)
+	return err
+}*/
+
+func importEmployeesFromCSV(filePath string) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	records, err := reader.ReadAll()
+	if err != nil {
+		return err
+	}
+
+	password := "starcoms2024" // Password default untuk semua user impor
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+
+	// Lewati baris header (records[0])
+	for _, record := range records[1:] {
+		name := record[1]
+		nik := record[2]
+		email := record[3]
+		departmentName := record[4]
+
+		// Dapatkan department_id dari namanya
+		var departmentID int64
+		database.Pool.QueryRow(context.Background(),
+			`INSERT INTO departments (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
+			departmentName).Scan(&departmentID)
+
+		// Tetapkan peran default
+		role := "employee"
+		if departmentName == "Direksi" {
+			role = "super_admin"
+		}
+
+		// Masukkan ke database
+		_, err := database.Pool.Exec(context.Background(),
+			`INSERT INTO employees (name, employee_nik, email, department_id, role, password_hash)
+			 VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (employee_nik) DO NOTHING`,
+			name, nik, email, departmentID, role, string(hashedPassword))
+
+		if err != nil {
+			log.Printf("Could not insert employee %s: %v", name, err)
+		}
+	}
+	return nil
+}

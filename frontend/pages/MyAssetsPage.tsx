@@ -1,10 +1,11 @@
 // File: src/pages/MyAssetsPage.tsx
 import { useEffect, useState } from 'react';
-import apiClient from '../src/services/api';
-import toast from 'react-hot-toast';
-import type { Asset } from '../src//types'; // Kita bisa gunakan tipe Asset yang sudah ada
+import apiClient from '@/services/api';
+import { toast } from 'sonner';
+import type { Asset } from '@/types'; // Kita bisa gunakan tipe Asset yang sudah ada
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../src/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function MyAssetsPage() {
   const [myAssets, setMyAssets] = useState<Asset[]>([]);
@@ -21,37 +22,39 @@ export default function MyAssetsPage() {
   }, []);
 
   return (
-    <div className="container mx-auto py-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Aset Saya</h1>
-      </div>
-
-      <div className="bg-white p-4 border rounded-lg">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Tag Aset</TableHead>
-              <TableHead>Nama Aset</TableHead>
-              <TableHead>Tipe</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow><TableCell colSpan={3} className="text-center h-24">Loading...</TableCell></TableRow>
-            ) : myAssets && myAssets.length > 0 ? (
-              myAssets.map((asset) => (
-                <TableRow key={asset.id}>
-                  <TableCell className="font-mono">{asset.asset_tag}</TableCell>
-                  <TableCell className="font-medium">{asset.name}</TableCell>
-                  <TableCell>{asset.asset_type_name || '-'}</TableCell>
-                </TableRow>
-              ))
-            ) : (
-                <TableRow><TableCell colSpan={3} className="text-center h-24">Anda tidak memiliki aset yang di-assign.</TableCell></TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+    <div className="space-y-6 p-4 md:p-6">
+      <h1 className="text-2xl font-semibold">Aset Saya</h1>
+      <Card>
+        <CardHeader>
+          <CardTitle>Daftar Aset yang Ditugaskan</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Tag Aset</TableHead>
+                <TableHead>Nama Aset</TableHead>
+                <TableHead>Tipe</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow><TableCell colSpan={3} className="text-center h-24">Memuat data…</TableCell></TableRow>
+              ) : myAssets.length > 0 ? (
+                myAssets.map((a) => (
+                  <TableRow key={a.id}>
+                    <TableCell className="font-mono">{a.asset_tag}</TableCell>
+                    <TableCell>{a.name}</TableCell>
+                    <TableCell>{a.asset_type_name || '-'}</TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow><TableCell colSpan={3} className="text-center h-24">Anda belum memiliki aset aktif.</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
-  );
+  )
 }

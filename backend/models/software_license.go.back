@@ -1,0 +1,60 @@
+package models
+
+import (
+	"time"
+)
+
+// SoftwareLicense merepresentasikan entitas lisensi perangkat lunak
+// sesuai ISO/IEC 19770-10:2025 (ITAM Grade A)
+type SoftwareLicense struct {
+	ID                   int64      `json:"id"`
+	Name                 string     `json:"name"`
+	LicenseKey           *string    `json:"license_key,omitempty"`
+	Vendor               *string    `json:"vendor,omitempty"`
+	Publisher            *string    `json:"publisher,omitempty"`
+	Version              *string    `json:"version,omitempty"`
+	LicenseType          *string    `json:"license_type,omitempty"`
+	LicenseModel         *string    `json:"license_model,omitempty"`
+	Metric               *string    `json:"metric,omitempty"`
+	Category             *string    `json:"category,omitempty"`
+	CostCenter           *string    `json:"cost_center,omitempty"`
+	Status               *string    `json:"status,omitempty"`
+	ContractID           *int64     `json:"contract_id,omitempty"`
+	ContractNumber       *string    `json:"contract_number,omitempty"`
+	BudgetID             *int64     `json:"budget_id,omitempty"` // 🔹 baru
+	TotalSeats           int        `json:"total_seats"`
+	UsedSeats            *int       `json:"used_seats,omitempty"`
+	Cost                 *float64   `json:"cost,omitempty"`
+	PurchaseDate         *time.Time `json:"purchase_date,omitempty"`
+	ExpirationDate       *time.Time `json:"expiration_date,omitempty"`
+	MaintenanceExpiry    *time.Time `json:"maintenance_expiry,omitempty"`
+	ComplianceStatus     *string    `json:"compliance_status,omitempty"`
+	VerificationDate     *time.Time `json:"verification_date,omitempty"`
+	EntitlementDoc       *string    `json:"entitlement_doc,omitempty"`
+	ProcurementReference *string    `json:"procurement_reference,omitempty"`
+	CreatedAt            *time.Time `json:"created_at"`
+	UpdatedAt            *time.Time `json:"updated_at"`
+	UpdatedBy            *int64     `json:"updated_by,omitempty"`
+	Currency             *string    `json:"currency,omitempty"`
+	DeletedAt            *time.Time `json:"-"`
+}
+
+// SoftwareInstallation mencatat hubungan lisensi–aset
+type SoftwareInstallation struct {
+	ID               int64      `json:"id"`
+	AssetID          int64      `json:"asset_id"`
+	LicenseID        int64      `json:"license_id"`
+	InstallationDate time.Time  `json:"installation_date"`
+	InstalledBy      *int64     `json:"installed_by,omitempty"`
+	RemovedAt        *time.Time `json:"removed_at,omitempty"`
+	Notes            *string    `json:"notes,omitempty"`
+}
+
+// InstalledSoftwareInfo digunakan untuk join tampilan software terinstal
+type InstalledSoftwareInfo struct {
+	InstallationID   int64     `json:"installation_id"`
+	LicenseID        int64     `json:"license_id"`
+	LicenseName      string    `json:"license_name"`
+	LicenseKey       *string   `json:"license_key,omitempty"`
+	InstallationDate time.Time `json:"installation_date"`
+}

@@ -1,50 +1,46 @@
-// File: src/components/ImportEmployeeModal.tsx
-import { useState } from 'react';
-import apiClient from '@/services/api';
-import toast from 'react-hot-toast';
+import { useState } from 'react'
+import apiClient from '@/services/api'
+import { toast } from 'sonner'
 
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 interface ImportEmployeeModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess: () => void;
+  isOpen: boolean
+  onClose: () => void
+  onSuccess: () => void
 }
 
 export default function ImportEmployeeModal({ isOpen, onClose, onSuccess }: ImportEmployeeModalProps) {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files) {
-      setSelectedFile(event.target.files[0]);
-    }
-  };
+    if (event.target.files?.[0]) setSelectedFile(event.target.files[0])
+  }
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
     if (!selectedFile) {
-      toast.error("Silakan pilih file CSV terlebih dahulu.");
-      return;
+      toast.error('Silakan pilih file CSV terlebih dahulu.')
+      return
     }
-
-    const formData = new FormData();
-    formData.append("file", selectedFile);
+    const formData = new FormData()
+    formData.append('file', selectedFile)
 
     const promise = apiClient.post('/employees/import', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    })
 
     toast.promise(promise, {
       loading: 'Mengimpor data karyawan...',
       success: (res) => {
-        onSuccess();
-        return res.data.message || 'Proses impor selesai!';
+        onSuccess()
+        return res?.data?.message || 'Proses impor selesai!'
       },
       error: 'Gagal mengimpor data.',
-    });
-  };
+    })
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -55,12 +51,12 @@ export default function ImportEmployeeModal({ isOpen, onClose, onSuccess }: Impo
             Pilih file CSV dengan kolom: No, Nama, NIK, Email, Departemen.
           </DialogDescription>
         </DialogHeader>
-        <div className="py-4">
+        <div className="py-4 space-y-2">
           <Label htmlFor="csv-file">File CSV</Label>
           <Input id="csv-file" type="file" accept=".csv" onChange={handleFileChange} />
         </div>
         <Button onClick={handleUpload} className="w-full">Unggah dan Impor</Button>
       </DialogContent>
     </Dialog>
-  );
+  )
 }

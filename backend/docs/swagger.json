@@ -1,0 +1,52 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "API documentation for Asset \u0026 Compliance module (ISO/IEC 19770-10 Grade A)",
+        "title": "ITAM Backend API",
+        "contact": {},
+        "version": "1.0"
+    },
+    "basePath": "/api/v1",
+    "paths": {
+        "/assets/compliance-export": {
+            "get": {
+                "produces": [
+                    "text/csv"
+                ],
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Export compliance report as CSV",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    }
+                }
+            }
+        },
+        "/assets/compliance-summary": {
+            "get": {
+                "description": "Retrieve compliance status of all assets",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Get all asset compliance records",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

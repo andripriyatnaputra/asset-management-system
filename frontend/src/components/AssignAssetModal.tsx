@@ -1,104 +1,133 @@
-// File: src/components/AssignAssetModal.tsx
-import { useState, useEffect } from 'react';
-import apiClient from '../services/api';
-import toast from 'react-hot-toast';
-import type { Employee } from '../types';
+import { useEffect, useState } from "react"
+import apiClient from "@/services/api"
+import { toast } from "sonner"
+import type { Employee } from "@/types"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
 
-import { Button } from "../components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Textarea } from '../components/ui/textarea';
-import { Label } from '../components/ui/label';
-
-// Pastikan interface ini memiliki 'onClose'
 interface AssignAssetModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  assetId: number | null;
-  onSuccess: () => void;
+  assetId: number
+  isOpen: boolean
+  onClose: () => void
+  onAssigned: () => void
 }
 
-export default function AssignAssetModal({ isOpen, onClose, assetId, onSuccess }: AssignAssetModalProps) {
-  const [employees, setEmployees] = useState<Employee[] | null>(null);
-  const [selectedEmployee, setSelectedEmployee] = useState('');
-  const [notes, setNotes] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+export default function AssignAssetModal({
+  assetId,
+  isOpen,
+  onClose,
+  onAssigned,
+}: AssignAssetModalProps) {
+  const [employees, setEmployees] = useState<Employee[]>([])
+  const [employeeId, setEmployeeId] = useState<string>("")
+  const [submitting, setSubmitting] = useState(false)
 
+  // 🔹 Load employees setiap modal dibuka
   useEffect(() => {
-    if (isOpen) {
-      setIsLoading(true);
-      apiClient.get('/employees?limit=500')
-        .then(response => {
-          setEmployees(response.data.data);
-        })
-        .catch(() => toast.error('Gagal memuat daftar karyawan.'))
-        .finally(() => setIsLoading(false));
-    } else {
-      setSelectedEmployee('');
-      setNotes('');
-    }
-  }, [isOpen]);
+    if (!isOpen) return
+    apiClient
+      .get("/employees")
+      .then((res) => {
+        const data = res.data?.data ?? res.data ?? []
+        setEmployees(Array.isArray(data) ? data : [])
+      })
+      .catch(() => {
+        toast.error("Gagal memuat daftar karyawan.")
+        setEmployees([])
+      })
+  }, [isOpen])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedEmployee || !assetId) {
-      toast.error('Silakan pilih karyawan.');
-      return;
+  // 🔹 Handler submit assign
+  const handleAssign = async () => {
+    if (submitting) return
+    if (!employeeId) {
+      toast.error("Pilih karyawan terlebih dahulu.")
+      return
     }
-    
-    const promise = apiClient.post(`/assets/${assetId}/assign`, {
-      employee_nik: selectedEmployee,
-      notes: notes,
-    });
 
-    toast.promise(promise, {
-        loading: 'Melakukan assignment...',
-        success: () => {
-            onSuccess(); // Panggil onSuccess dari props
-            return 'Aset berhasil di-assign!';
-        },
-        error: (err) => err.response?.data?.error || 'Gagal melakukan assignment.'
-    });
-  };
+    setSubmitting(true)
+    try {
+      const promise = apiClient.post(`/assets/${assetId}/assign`, {
+        employee_id: Number(employeeId),
+      })
+
+      // Tampilkan toast berbasis promise
+      toast.promise(promise, {
+        loading: "Meng-assign aset...",
+        success: "Aset berhasil diassign.",
+        error: (err) =>
+          err?.response?.data?.error ||
+          "Gagal meng-assign aset. Periksa koneksi atau status aset.",
+      })
+
+      // Tunggu hasil Axios-nya
+      const res = await promise
+      if (res.status === 200) {
+        onAssigned() // trigger reload di parent
+        onClose()    // tutup modal
+      }
+    } catch (err) {
+      console.error("[AssignAssetModal] Error:", err)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+
 
   return (
-    // Gunakan <Dialog> dari Shadcn, yang menggunakan onOpenChange
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Assign Asset</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 py-2">
-            <div>
-                <Label htmlFor="employee-select">Pilih Karyawan</Label>
-                <Select onValueChange={setSelectedEmployee} value={selectedEmployee}>
-                    <SelectTrigger id="employee-select">
-                    <SelectValue placeholder={isLoading ? "Memuat..." : "Pilih Karyawan..."} />
-                    </SelectTrigger>
-                    <SelectContent>
-                    {employees && employees.map((emp) => (
-                        <SelectItem key={emp.id} value={emp.employee_nik}>
-                        {emp.name} ({emp.employee_nik})
-                        </SelectItem>
-                    ))}
-                    </SelectContent>
-                </Select>
-            </div>
-            <div>
-                <Label htmlFor="notes">Catatan (Opsional)</Label>
-                <Textarea
-                    id="notes"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Contoh: Diberikan untuk proyek X..."
-                />
-            </div>
-            <DialogFooter>
-                <Button type="button" variant="outline" onClick={onClose}>Batal</Button>
-                <Button type="submit">Assign Aset</Button>
-            </DialogFooter>
-        </form>
+
+        <div className="space-y-3 py-2">
+          <Label>Pilih Karyawan</Label>
+          <Select value={employeeId} onValueChange={setEmployeeId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Pilih karyawan" />
+            </SelectTrigger>
+            <SelectContent>
+              {employees.length === 0 ? (
+                <p className="text-muted-foreground text-sm px-2 py-1">
+                  Tidak ada data karyawan.
+                </p>
+              ) : (
+                employees.map((e) => (
+                  <SelectItem key={e.id} value={String(e.id)}>
+                    {e.employee_nik ? `[${e.employee_nik}] ` : ""}
+                    {e.name}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <DialogFooter className="mt-4">
+          <Button variant="outline" onClick={onClose}>
+            Batal
+          </Button>
+          <Button onClick={handleAssign} disabled={submitting}>
+            {submitting ? "Meng-assign…" : "Assign"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
+  )
 }

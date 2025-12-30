@@ -1,0 +1,818 @@
+// File: backend/handlers/ticket_handler.go
+package handlers
+
+import (
+	"context"
+	"encoding/csv"
+	"fmt"
+	"log"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/andripriyatnaputra/asset-management-system/backend/database"
+	"github.com/andripriyatnaputra/asset-management-system/backend/middleware"
+	"github.com/andripriyatnaputra/asset-management-system/backend/models"
+	"github.com/andripriyatnaputra/asset-management-system/backend/services"
+	"github.com/gin-gonic/gin"
+)
+
+// ===== UTIL =====
+
+func nullIfEmpty(s string) *string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	return &s
+}
+func pick(a, b string) string {
+	if strings.TrimSpace(a) != "" {
+		return a
+	}
+	return b
+}
+
+//
+// ---------------------- SLA POLICY (dynamic) ----------------------
+//
+
+// findSLAPolicy mencari SLA dinamis dari tabel sla_policies
+func findSLAPolicy(ctx context.Context, categoryCode, serviceCode, impact, urgency string) (models.SLAPolicy, error) {
+	var policy models.SLAPolicy
+	query := `
+		SELECT id, name, category_code, service_code,
+		       impact, urgency, resulting_priority,
+		       response_minutes, resolve_minutes
+		  FROM sla_policies
+		 WHERE is_active = TRUE
+		   AND (category_code = $1 OR category_code IS NULL)
+		   AND (service_code = $2 OR service_code IS NULL)
+		   AND impact = $3
+		   AND urgency = $4
+		 ORDER BY category_code DESC NULLS LAST, service_code DESC NULLS LAST
+		 LIMIT 1
+	`
+	err := database.Pool.QueryRow(ctx, query,
+		categoryCode, serviceCode, impact, urgency,
+	).Scan(
+		&policy.ID, &policy.Name, &policy.CategoryCode, &policy.ServiceCode,
+		&policy.Impact, &policy.Urgency, &policy.ResultingPriority,
+		&policy.ResponseMinutes, &policy.ResolveMinutes,
+	)
+	if err != nil {
+		// fallback policy default
+		policy = models.SLAPolicy{
+			ID:                0,
+			Name:              "Default SLA",
+			ResultingPriority: "Medium",
+			ResponseMinutes:   60,
+			ResolveMinutes:    1440,
+		}
+		return policy, nil
+	}
+	return policy, nil
+}
+
+// computeDueFromPolicy menghitung due date respon dan resolusi
+func computeDueFromPolicy(policy models.SLAPolicy) (time.Time, time.Time) {
+	now := time.Now()
+	responseDue := now.Add(time.Duration(policy.ResponseMinutes) * time.Minute)
+	resolveDue := now.Add(time.Duration(policy.ResolveMinutes) * time.Minute)
+	return responseDue, resolveDue
+}
+
+func strOrEmpty(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// ===== CREATE =====
+
+// POST /tickets
+func CreateTicket(c *gin.Context) {
+	var input struct {
+		Subject        string  `json:"subject" binding:"required"`
+		Description    string  `json:"description"`
+		Impact         string  `json:"impact" binding:"required"`
+		Urgency        string  `json:"urgency" binding:"required"`
+		CategoryCode   *string `json:"category_code"`
+		ServiceCode    *string `json:"service_code"`
+		EmployeeID     *int64  `json:"employee_id"`
+		RelatedAssetID *int64  `json:"related_asset_id"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+		return
+	}
+
+	// ✅ ambil employee ID dari token jika tidak dikirim
+	createdBy := input.EmployeeID
+	if createdBy == nil {
+		if uid, exists := c.Get("user_id"); exists {
+			tmp := int64(uid.(int))
+			createdBy = &tmp
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "missing employee_id"})
+			return
+		}
+	}
+
+	// ✅ validasi asset jika diisi
+	if input.RelatedAssetID != nil {
+		var exists bool
+		err := database.Pool.QueryRow(c, `
+			SELECT EXISTS (
+				SELECT 1 FROM assets 
+				WHERE id = $1 AND assigned_to = $2 AND deleted_at IS NULL
+			)
+		`, input.RelatedAssetID, createdBy).Scan(&exists)
+		if err != nil || !exists {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or unassigned asset"})
+			return
+		}
+	}
+
+	// ✅ ambil SLA policy yang sesuai
+	policy, _ := findSLAPolicy(c,
+		strOrEmpty(input.CategoryCode),
+		strOrEmpty(input.ServiceCode),
+		input.Impact,
+		input.Urgency,
+	)
+	responseDue, resolveDue := computeDueFromPolicy(policy)
+
+	var ticketID int64
+	err := database.Pool.QueryRow(c, `
+		INSERT INTO tickets (
+			subject, description, impact, urgency, priority, status,
+			created_by_employee_id, related_asset_id, category_code, service_code,
+			sla_policy_id, response_due_at, sla_due_at, created_at
+		)
+		VALUES ($1,$2,$3,$4,$5,'Open',$6,$7,$8,$9,$10,$11,$12,NOW())
+		RETURNING id
+	`,
+		input.Subject,
+		input.Description,
+		input.Impact,
+		input.Urgency,
+		policy.ResultingPriority,
+		createdBy,
+		input.RelatedAssetID,
+		input.CategoryCode,
+		input.ServiceCode,
+		policy.ID,
+		responseDue,
+		resolveDue,
+	).Scan(&ticketID)
+
+	if err != nil {
+		log.Printf("[TICKET_CREATE_ERROR] %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create ticket"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"id":               ticketID,
+		"priority":         policy.ResultingPriority,
+		"response_due_at":  responseDue,
+		"resolve_due_at":   resolveDue,
+		"related_asset_id": input.RelatedAssetID,
+	})
+}
+
+//
+// ---------------------- UPDATE ----------------------
+//
+
+// PUT /tickets/:id
+func UpdateTicket(c *gin.Context) {
+	id := c.Param("id")
+	userIDVal, _ := c.Get("user_id")
+	userID := int64(userIDVal.(int))
+
+	var input struct {
+		Status     *string `json:"status"`
+		AssigneeID *int64  `json:"assignee_id"`
+		Resolution *string `json:"resolution"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+		return
+	}
+
+	// --- Ambil status lama untuk perbandingan ---
+	var oldStatus string
+	err := database.Pool.QueryRow(c,
+		`SELECT status FROM tickets WHERE id = $1 AND deleted_at IS NULL`, id).
+		Scan(&oldStatus)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ticket not found"})
+		return
+	}
+
+	// --- Persiapan field tambahan ---
+	now := time.Now()
+	var resolvedAt, closedAt interface{}
+	if input.Status != nil {
+		switch strings.ToLower(*input.Status) {
+		case "resolved":
+			resolvedAt = now
+		case "closed":
+			closedAt = now
+		}
+	}
+
+	// --- Update tiket ---
+	query := `
+		UPDATE tickets
+		   SET status = COALESCE($1, status),
+		       assigned_to_employee_id = COALESCE($2, assigned_to_employee_id),
+		       updated_at = NOW(),
+		       updated_by = $5,
+		       resolved_at = COALESCE($6, resolved_at),
+		       closed_at = COALESCE($7, closed_at),
+		       last_status_changed_at = CASE 
+		           WHEN $1 IS NOT NULL AND $1 <> status THEN NOW() 
+		           ELSE last_status_changed_at 
+		       END
+		 WHERE id = $4 AND deleted_at IS NULL
+	`
+	_, err = database.Pool.Exec(c,
+		query,
+		input.Status,
+		input.AssigneeID,
+		input.Resolution, // optional, nanti bisa disimpan ke komentar tiket
+		id,
+		userID,
+		resolvedAt,
+		closedAt,
+	)
+
+	if err != nil {
+		log.Printf("[TICKET_UPDATE_ERROR] %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update ticket"})
+		return
+	}
+
+	// --- Logging ---
+	ticketID, _ := strconv.ParseInt(id, 10, 64)
+	middleware.LogAction(c, "tickets", ticketID, "UPDATE", input)
+
+	// --- 🔔 Kirim notifikasi jika status berubah ---
+	if input.Status != nil && *input.Status != oldStatus {
+		go func(ticketID string, newStatus string) {
+			var reporterEmail, assigneeEmail string
+
+			_ = database.Pool.QueryRow(context.Background(),
+				`SELECT e.email
+				   FROM employees e
+				  JOIN tickets t ON t.created_by_employee_id = e.id
+				 WHERE t.id = $1`, ticketID).Scan(&reporterEmail)
+
+			_ = database.Pool.QueryRow(context.Background(),
+				`SELECT e.email
+				   FROM employees e
+				  JOIN tickets t ON t.assigned_to_employee_id = e.id
+				 WHERE t.id = $1`, ticketID).Scan(&assigneeEmail)
+
+			if reporterEmail != "" {
+				services.SendEmailNotification(context.Background(), services.TicketNotification{
+					ToEmail: reporterEmail,
+					Subject: "Status Tiket Diperbarui",
+					Message: "Status tiket #" + ticketID + " kini menjadi: " + newStatus,
+				})
+			}
+			if assigneeEmail != "" && reporterEmail != assigneeEmail {
+				services.SendEmailNotification(context.Background(), services.TicketNotification{
+					ToEmail: assigneeEmail,
+					Subject: "Status Tiket Telah Berubah",
+					Message: "Tiket #" + ticketID + " kini berstatus: " + newStatus,
+				})
+			}
+		}(id, *input.Status)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "ticket updated successfully"})
+}
+
+// ===== COMMENTS + ATTACHMENTS =====
+
+//
+// ---------------------- COMMENT ----------------------
+//
+
+// POST /tickets/:id/comments
+func AddCommentToTicket(c *gin.Context) {
+	ticketID := c.Param("id")
+	uid, _ := c.Get("user_id")
+	userID := int64(uid.(int))
+
+	var input struct {
+		CommentText  string `json:"comment_text" binding:"required"`
+		IsResolution bool   `json:"is_resolution"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+		return
+	}
+
+	// --- Insert ke tabel ticket_comments ---
+	var commentID int64
+	err := database.Pool.QueryRow(c, `
+		INSERT INTO ticket_comments (ticket_id, employee_id, comment, created_at)
+		VALUES ($1, $2, $3, NOW())
+		RETURNING id
+	`, ticketID, userID, input.CommentText).Scan(&commentID)
+	if err != nil {
+		log.Printf("[TICKET_COMMENT_ERROR] %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add comment"})
+		return
+	}
+
+	// --- Jika ini merupakan resolution note, ubah status tiket menjadi "Resolved" ---
+	if input.IsResolution {
+		_, err := database.Pool.Exec(c, `
+			UPDATE tickets
+			   SET status = 'Resolved',
+			       resolved_at = NOW(),
+			       updated_at = NOW(),
+			       updated_by = $2,
+			       last_status_changed_at = NOW()
+			 WHERE id = $1 AND deleted_at IS NULL
+		`, ticketID, userID)
+		if err != nil {
+			log.Printf("[TICKET_RESOLVE_UPDATE_ERROR] %v", err)
+		} else {
+			// 🔔 Kirim notifikasi ke pelapor dan teknisi
+			go func(ticketID string) {
+				var reporterEmail, assigneeEmail string
+
+				_ = database.Pool.QueryRow(context.Background(),
+					`SELECT e.email
+					   FROM employees e
+					  JOIN tickets t ON t.created_by_employee_id = e.id
+					 WHERE t.id = $1`, ticketID).Scan(&reporterEmail)
+
+				_ = database.Pool.QueryRow(context.Background(),
+					`SELECT e.email
+					   FROM employees e
+					  JOIN tickets t ON t.assigned_to_employee_id = e.id
+					 WHERE t.id = $1`, ticketID).Scan(&assigneeEmail)
+
+				msg := fmt.Sprintf("Tiket #%s telah diselesaikan. Catatan: %s", ticketID, input.CommentText)
+				if reporterEmail != "" {
+					services.SendEmailNotification(context.Background(), services.TicketNotification{
+						ToEmail: reporterEmail,
+						Subject: "Tiket Telah Diselesaikan",
+						Message: msg,
+					})
+				}
+				if assigneeEmail != "" && reporterEmail != assigneeEmail {
+					services.SendEmailNotification(context.Background(), services.TicketNotification{
+						ToEmail: assigneeEmail,
+						Subject: "Konfirmasi Penyelesaian Tiket",
+						Message: msg,
+					})
+				}
+			}(ticketID)
+		}
+	}
+
+	// --- Audit log ---
+	middleware.LogAction(c, "ticket_comments", commentID, "COMMENT", input)
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message":       "comment added successfully",
+		"id":            commentID,
+		"is_resolution": input.IsResolution,
+	})
+}
+
+//
+// ---------------------- DELETE ----------------------
+//
+
+// DELETE /tickets/:id
+func DeleteTicket(c *gin.Context) {
+	id := c.Param("id")
+	var exists bool
+	err := database.Pool.QueryRow(c,
+		`SELECT EXISTS(SELECT 1 FROM tickets WHERE id=$1 AND deleted_at IS NULL)`, id).Scan(&exists)
+	if err != nil || !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ticket not found"})
+		return
+	}
+	_, err = database.Pool.Exec(c, `UPDATE tickets SET deleted_at = NOW() WHERE id = $1`, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete ticket"})
+		return
+	}
+
+	T_iD, _ := strconv.ParseInt(id, 10, 64)
+	middleware.LogAction(c, "tickets", T_iD, "DELETE", gin.H{"ticket_id": id})
+	c.JSON(http.StatusOK, gin.H{"message": "ticket deleted successfully"})
+}
+
+// ===== GET DETAIL (sertakan attachments) =====
+
+func GetTicketByID(c *gin.Context) {
+	id := c.Param("id")
+
+	// select ticket + reporter + assignee name
+	var t models.TicketDetail
+	err := database.Pool.QueryRow(c, `
+		SELECT t.id, t.subject, t.status, t.priority,
+		       t.category_code, t.service_code, t.impact, t.urgency,
+		       t.created_by_employee_id, e1.name,
+		       t.assigned_to_employee_id, e2.name,
+		       t.related_asset_id, t.sla_due_at, t.sla_breached_at,
+		       t.created_at, t.updated_at, t.description
+		FROM tickets t
+		JOIN employees e1 ON e1.id = t.created_by_employee_id
+		LEFT JOIN employees e2 ON e2.id = t.assigned_to_employee_id
+		WHERE t.id = $1
+	`, id).Scan(
+		&t.ID, &t.Subject, &t.Status, &t.Priority,
+		&t.CategoryCode, &t.ServiceCode, &t.Impact, &t.Urgency,
+		&t.CreatedByEmployeeID, &t.CreatedByEmployeeName,
+		&t.AssignedToEmployeeID, &t.AssignedToEmployeeName,
+		&t.RelatedAssetID, &t.SLADueAt, &t.SLABreachedAt,
+		&t.CreatedAt, &t.UpdatedAt, &t.Description,
+	)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Ticket not found"})
+		return
+	}
+
+	// comments + attachments
+	rows, _ := database.Pool.Query(c, `
+		SELECT c.id, c.employee_id, e.name, c.comment, c.created_at
+		FROM ticket_comments c
+		JOIN employees e ON e.id = c.employee_id
+		WHERE c.ticket_id = $1
+		ORDER BY c.created_at ASC
+	`, id)
+	defer rows.Close()
+
+	var comments []models.TicketCommentInfo
+	for rows.Next() {
+		var ci models.TicketCommentInfo
+		if err := rows.Scan(&ci.ID, &ci.EmployeeID, &ci.EmployeeName, &ci.Comment, &ci.CreatedAt); err == nil {
+			comments = append(comments, ci)
+		}
+	}
+	for i := range comments {
+		arows, _ := database.Pool.Query(c, `
+			SELECT id, filename, path, mime_type, size, created_at
+			FROM ticket_attachments
+			WHERE comment_id = $1
+			ORDER BY id
+		`, comments[i].ID)
+		var atts []models.TicketAttachment
+		for arows.Next() {
+			var a models.TicketAttachment
+			if err := arows.Scan(&a.ID, &a.Filename, &a.Path, &a.MimeType, &a.Size, &a.CreatedAt); err == nil {
+				a.TicketID, a.CommentID = t.ID, &comments[i].ID
+				a.URL = strings.TrimPrefix(a.Path, ".") // sederhana: map path -> URL relatif
+				atts = append(atts, a)
+			}
+		}
+		arows.Close()
+		comments[i].Attachments = atts
+	}
+	t.Comments = comments
+
+	c.JSON(http.StatusOK, t)
+}
+
+// ===== LIST + FILTER + CSV =====
+
+func GetAllTickets(c *gin.Context) {
+	q := strings.TrimSpace(c.Query("q"))
+	status := strings.TrimSpace(c.Query("status"))
+	priority := strings.TrimSpace(c.Query("priority"))
+	assignee := strings.TrimSpace(c.Query("assignee"))
+	category := strings.TrimSpace(c.Query("category_code"))
+	service := strings.TrimSpace(c.Query("service_code"))
+
+	page, _ := strconv.Atoi(c.Query("page"))
+	if page < 1 {
+		page = 1
+	}
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	if limit <= 0 || limit > 100 {
+		limit = 10
+	}
+	offset := (page - 1) * limit
+
+	where := []string{"t.deleted_at IS NULL"}
+	params := []any{}
+	i := 1
+
+	if q != "" {
+		where = append(where, fmt.Sprintf("(LOWER(t.subject) LIKE $%d OR CAST(t.id AS TEXT) LIKE $%d OR LOWER(e1.name) LIKE $%d)", i, i, i))
+		params = append(params, "%"+strings.ToLower(q)+"%")
+		i++
+	}
+	if status != "" && strings.ToLower(status) != "all" {
+		where = append(where, fmt.Sprintf("t.status = $%d", i))
+		params = append(params, status)
+		i++
+	}
+	if priority != "" && strings.ToLower(priority) != "all" {
+		where = append(where, fmt.Sprintf("t.priority = $%d", i))
+		params = append(params, priority)
+		i++
+	}
+	if assignee != "" && strings.ToLower(assignee) != "all" {
+		where = append(where, fmt.Sprintf("t.assigned_to_employee_id = $%d", i))
+		aid, _ := strconv.ParseInt(assignee, 10, 64)
+		params = append(params, aid)
+		i++
+	}
+	if category != "" && strings.ToLower(category) != "all" {
+		where = append(where, fmt.Sprintf("t.category_code = $%d", i))
+		params = append(params, category)
+		i++
+	}
+	if service != "" && strings.ToLower(service) != "all" {
+		where = append(where, fmt.Sprintf("t.service_code = $%d", i))
+		params = append(params, service)
+		i++
+	}
+
+	whereSQL := strings.Join(where, " AND ")
+	listSQL := `
+		SELECT t.id, t.subject, t.status, t.priority,
+		       t.category_code, t.service_code, t.impact, t.urgency,
+		       t.created_by_employee_id, e1.name,
+		       t.assigned_to_employee_id, e2.name,
+		       t.related_asset_id, t.sla_due_at, t.sla_breached_at,
+		       t.created_at, t.updated_at
+		FROM tickets t
+		JOIN employees e1 ON e1.id = t.created_by_employee_id
+		LEFT JOIN employees e2 ON e2.id = t.assigned_to_employee_id
+		WHERE ` + whereSQL + `
+		ORDER BY t.updated_at DESC
+		LIMIT $` + strconv.Itoa(i) + ` OFFSET $` + strconv.Itoa(i+1)
+	params = append(params, limit, offset)
+
+	rows, err := database.Pool.Query(c, listSQL, params...)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to query"})
+		return
+	}
+	defer rows.Close()
+
+	var list []models.TicketInfo
+	for rows.Next() {
+		var ti models.TicketInfo
+		if err := rows.Scan(
+			&ti.ID, &ti.Subject, &ti.Status, &ti.Priority,
+			&ti.CategoryCode, &ti.ServiceCode, &ti.Impact, &ti.Urgency,
+			&ti.CreatedByEmployeeID, &ti.CreatedByEmployeeName,
+			&ti.AssignedToEmployeeID, &ti.AssignedToEmployeeName,
+			&ti.RelatedAssetID, &ti.SLADueAt, &ti.SLABreachedAt,
+			&ti.CreatedAt, &ti.UpdatedAt,
+		); err == nil {
+			list = append(list, ti)
+		}
+	}
+
+	// CSV export
+	if strings.ToLower(c.Query("format")) == "csv" {
+		c.Header("Content-Disposition", "attachment; filename=tickets.csv")
+		c.Header("Content-Type", "text/csv")
+		w := csv.NewWriter(c.Writer)
+		_ = w.Write([]string{"ID", "Subject", "Status", "Priority", "Category", "Service", "Reporter", "Assignee", "UpdatedAt"})
+		for _, t := range list {
+			assigneeName := ""
+			if t.AssignedToEmployeeName != nil {
+				assigneeName = *t.AssignedToEmployeeName
+			}
+			cat := ""
+			if t.CategoryCode != nil {
+				cat = *t.CategoryCode
+			}
+			svc := ""
+			if t.ServiceCode != nil {
+				svc = *t.ServiceCode
+			}
+			_ = w.Write([]string{
+				fmt.Sprint(t.ID), t.Subject, t.Status, t.Priority, cat, svc, t.CreatedByEmployeeName, assigneeName, t.UpdatedAt.Format(time.RFC3339),
+			})
+		}
+		w.Flush()
+		return
+	}
+
+	// pagination ringan (optional)
+	c.JSON(http.StatusOK, gin.H{
+		"data":       list,
+		"pagination": gin.H{"current_page": page, "limit": limit, "total_pages": nil}, // hitung total kalau perlu
+	})
+}
+
+// POST /tickets/:id/assign
+func AssignTicket(c *gin.Context) {
+	ticketID := c.Param("id")
+
+	var input struct {
+		AssigneeID int64 `json:"assignee_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+		return
+	}
+
+	// Pastikan tiket masih aktif
+	var exists bool
+	err := database.Pool.QueryRow(c,
+		`SELECT EXISTS(SELECT 1 FROM tickets WHERE id=$1 AND deleted_at IS NULL)`,
+		ticketID,
+	).Scan(&exists)
+	if err != nil || !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ticket not found"})
+		return
+	}
+
+	// Update assignment
+	_, err = database.Pool.Exec(c, `
+		UPDATE tickets
+		   SET assignee_id = $1, status = 'In Progress', updated_at = NOW()
+		 WHERE id = $2
+	`, input.AssigneeID, ticketID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to assign ticket"})
+		return
+	}
+
+	T_iD, _ := strconv.ParseInt(ticketID, 10, 64)
+	middleware.LogAction(c, "tickets", T_iD, "ASSIGN", input)
+
+	// 🔔 Kirim notifikasi ke assignee
+	go func() {
+		var email string
+		_ = database.Pool.QueryRow(context.Background(),
+			`SELECT email FROM employees WHERE id = $1`, input.AssigneeID,
+		).Scan(&email)
+		if email != "" {
+			services.SendEmailNotification(context.Background(), services.TicketNotification{
+				ToEmail: email,
+				Subject: "Tiket Baru Telah Ditetapkan Kepada Anda",
+				Message: "Anda telah ditetapkan sebagai penanggung jawab tiket #" + ticketID + ". Silakan tinjau di portal ITSM.",
+			})
+		}
+	}()
+
+	c.JSON(http.StatusOK, gin.H{"message": "ticket assigned successfully"})
+}
+
+// GET /tickets/:id/history
+func GetTicketHistory(c *gin.Context) {
+	ticketID := c.Param("id")
+
+	rows, err := database.Pool.Query(c, `
+		SELECT id, actor_id, action, changes, created_at
+		  FROM audit_logs
+		 WHERE entity_name = 'tickets' AND entity_id = $1
+		 ORDER BY created_at ASC
+	`, ticketID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch ticket history"})
+		return
+	}
+	defer rows.Close()
+
+	type History struct {
+		ID        int64       `json:"id"`
+		ActorID   *int64      `json:"actor_id,omitempty"`
+		Action    string      `json:"action"`
+		Changes   interface{} `json:"changes"`
+		Timestamp time.Time   `json:"timestamp"`
+	}
+
+	var history []History
+	for rows.Next() {
+		var h History
+		_ = rows.Scan(&h.ID, &h.ActorID, &h.Action, &h.Changes, &h.Timestamp)
+		history = append(history, h)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"history": history})
+}
+
+// POST /tickets/:id/resolve
+func ResolveTicket(c *gin.Context) {
+	ticketID := c.Param("id")
+	userIDVal, _ := c.Get("user_id")
+	userID := int64(userIDVal.(int))
+
+	var input struct {
+		ResolutionNote string `json:"resolution_note"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+		return
+	}
+
+	_, err := database.Pool.Exec(c, `
+		UPDATE tickets
+		   SET status = 'Resolved',
+		       updated_at = NOW(),
+		       resolved_at = NOW(),
+		       updated_by = $2
+		 WHERE id = $1 AND deleted_at IS NULL
+	`, ticketID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to resolve ticket"})
+		return
+	}
+
+	middleware.LogAction(c, "tickets", mustParseInt64(ticketID), "RESOLVE", input)
+	c.JSON(http.StatusOK, gin.H{"message": "ticket marked as resolved"})
+}
+
+func mustParseInt64(s string) int64 {
+	id, _ := strconv.ParseInt(s, 10, 64)
+	return id
+}
+
+// POST /tickets/:id/close
+func CloseTicket(c *gin.Context) {
+	ticketID := c.Param("id")
+	userIDVal, _ := c.Get("user_id")
+	userID := int64(userIDVal.(int))
+
+	_, err := database.Pool.Exec(c, `
+		UPDATE tickets
+		   SET status = 'Closed',
+		       closed_at = NOW(),
+		       updated_at = NOW(),
+		       updated_by = $2
+		 WHERE id = $1 AND deleted_at IS NULL
+	`, ticketID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to close ticket"})
+		return
+	}
+
+	middleware.LogAction(c, "tickets", mustParseInt64(ticketID), "CLOSE", nil)
+	c.JSON(http.StatusOK, gin.H{"message": "ticket closed successfully"})
+}
+
+// POST /tickets/:id/escalate
+func EscalateTicket(c *gin.Context) {
+	ticketID := c.Param("id")
+
+	var input struct {
+		Level int `json:"level" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+		return
+	}
+
+	_, err := database.Pool.Exec(c, `
+		UPDATE tickets
+		   SET escalation_level = $1,
+		       updated_at = NOW()
+		 WHERE id = $2 AND deleted_at IS NULL
+	`, input.Level, ticketID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to escalate ticket"})
+		return
+	}
+
+	middleware.LogAction(c, "tickets", mustParseInt64(ticketID), "ESCALATE", input)
+	c.JSON(http.StatusOK, gin.H{"message": "ticket escalation updated"})
+}
+
+// GET /tickets/metrics
+func GetTicketMetrics(c *gin.Context) {
+	query := `
+		SELECT 
+			ROUND(AVG(EXTRACT(EPOCH FROM (resolved_at - created_at))/60),2) AS mttr,
+			ROUND(AVG(EXTRACT(EPOCH FROM (response_due_at - created_at))/60),2) AS mtta,
+			ROUND(100.0 * SUM(CASE WHEN breach_flag THEN 1 ELSE 0 END) / COUNT(*),2) AS breach_rate
+		FROM tickets
+		WHERE deleted_at IS NULL
+	`
+	var mttr, mtta, breachRate *float64
+	err := database.Pool.QueryRow(c, query).Scan(&mttr, &mtta, &breachRate)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to compute metrics"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"mttr_minutes":    mttr,
+		"mtta_minutes":    mtta,
+		"sla_breach_rate": breachRate,
+	})
+}

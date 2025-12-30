@@ -23,7 +23,8 @@ func CreateAuditSession(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Session name is required"})
 		return
 	}
-	userID, _ := c.Get("userID")
+	//userID, _ := c.Get("userID")
+	userID, _ := c.Get("user_id")
 
 	tx, err := database.Pool.Begin(context.Background())
 	if err != nil {
@@ -201,4 +202,60 @@ func CompleteAuditSession(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Audit session completed successfully"})
+}
+
+// =============================================================
+// 📘 Governance Audit Log Dashboard (ISO/IEC 19770-10 A.6.3)
+// =============================================================
+
+// GetAuditLogsDashboard menampilkan 200 aktivitas terakhir dari tabel audit_logs
+func GetAuditLogsDashboard(c *gin.Context) {
+	rows, err := database.Pool.Query(
+		context.Background(),
+		`
+		SELECT id,
+			   COALESCE(actor_id, 0) AS actor_id,
+			   entity_name,
+			   entity_id,
+			   action,
+			   COALESCE(changes::text, '{}') AS changes,
+			   COALESCE(ip_address, '-') AS ip_address,
+			   COALESCE(user_agent, '-') AS user_agent,
+			   COALESCE(request_path, '-') AS request_path,
+			   created_at
+		FROM audit_logs
+		ORDER BY created_at DESC
+		LIMIT 200
+		`,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch audit logs"})
+		return
+	}
+	defer rows.Close()
+
+	type LogItem struct {
+		ID          int64  `json:"id"`
+		ActorID     int64  `json:"actor_id"`
+		EntityName  string `json:"entity_name"`
+		EntityID    int64  `json:"entity_id"`
+		Action      string `json:"action"`
+		Changes     string `json:"changes"`
+		IPAddress   string `json:"ip_address"`
+		UserAgent   string `json:"user_agent"`
+		RequestPath string `json:"request_path"`
+		CreatedAt   string `json:"created_at"`
+	}
+
+	var logs []LogItem
+	for rows.Next() {
+		var l LogItem
+		_ = rows.Scan(
+			&l.ID, &l.ActorID, &l.EntityName, &l.EntityID, &l.Action,
+			&l.Changes, &l.IPAddress, &l.UserAgent, &l.RequestPath, &l.CreatedAt,
+		)
+		logs = append(logs, l)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"logs": logs})
 }

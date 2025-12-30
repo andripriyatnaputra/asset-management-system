@@ -5,6 +5,7 @@ export default {
     content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}", // Path ini penting
+	'./pages/**/*.{ts,tsx,js,jsx}',
   ],
   theme: {
   	extend: {

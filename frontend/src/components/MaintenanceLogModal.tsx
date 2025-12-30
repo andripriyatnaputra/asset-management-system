@@ -1,15 +1,15 @@
 // File: src/components/MaintenanceLogModal.tsx
 import { useState, useEffect } from 'react';
-import apiClient from '../services/api';
-import toast from 'react-hot-toast';
+import apiClient from '@/services/api';
+import { toast } from 'sonner'
 
-import { Button } from "../components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import { Input } from "../components/ui/input";
-import { Label } from "../components/ui/label";
-import { Textarea } from "../components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import type { AssetMaintenanceLog, TicketInfo } from '../types';
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { AssetMaintenanceLog, TicketInfo } from '@/types';
 
 interface MaintenanceLogModalProps {
   isOpen: boolean;
@@ -37,12 +37,14 @@ export default function MaintenanceLogModal({ isOpen, onClose, assetId }: Mainte
     // Ambil riwayat log yang sudah ada & tiket yang masih terbuka secara bersamaan
     Promise.all([
       apiClient.get(`/assets/${assetId}/maintenance-logs`),
-      apiClient.get(`/tickets?status=Open&limit=100`) // Ambil tiket yang masih 'Open'
+      apiClient.get(`/tickets?status=Open&limit=100`)
     ]).then(([logsRes, ticketsRes]) => {
-      setLogs(logsRes.data);
+      const logsData = Array.isArray(logsRes.data) ? logsRes.data : (logsRes.data?.data ?? [])
+      setLogs(logsData)
       // Filter tiket yang relevan dengan aset ini (jika ada)
-      const relevantTickets = ticketsRes.data.data.filter((ticket: TicketInfo) => ticket.related_asset_id === assetId);
-      setOpenTickets(relevantTickets);
+      const ticketsData = Array.isArray(ticketsRes.data) ? ticketsRes.data : (ticketsRes.data?.data ?? [])
+      const relevant = ticketsData.filter((t: TicketInfo) => t.related_asset_id === assetId)
+      setOpenTickets(relevant)
     }).catch(() => {
       toast.error("Gagal memuat data.");
     }).finally(() => {

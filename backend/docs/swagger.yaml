@@ -1,0 +1,35 @@
+basePath: /api/v1
+info:
+  contact: {}
+  description: API documentation for Asset & Compliance module (ISO/IEC 19770-10 Grade
+    A)
+  title: ITAM Backend API
+  version: "1.0"
+paths:
+  /assets/compliance-export:
+    get:
+      produces:
+      - text/csv
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+      summary: Export compliance report as CSV
+      tags:
+      - Compliance
+  /assets/compliance-summary:
+    get:
+      description: Retrieve compliance status of all assets
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get all asset compliance records
+      tags:
+      - Compliance
+swagger: "2.0"
