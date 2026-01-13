@@ -55,14 +55,24 @@ export default function DepartmentsPage() {
     setLoading(true)
     try {
       const res = await apiClient.get("/departments")
-      const data = Array.isArray(res.data.data) ? res.data.data : res.data
+
+      const raw = res.data?.data ?? res.data
+
+      const data: Department[] = Array.isArray(raw)
+        ? raw
+        : Array.isArray(raw?.data)
+          ? raw.data
+          : []
+
       setList(data)
     } catch {
+      setList([]) // ← penting
       toast.error("Gagal memuat departemen.")
     } finally {
       setLoading(false)
     }
   }
+
 
   const fetchCostCenters = async () => {
     try {
