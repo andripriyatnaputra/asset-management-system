@@ -1460,6 +1460,66 @@ func RestoreTicket(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "ticket and related data restored successfully"})
 }
 
+func GetTicketCategories(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	rows, err := database.Pool.Query(ctx, `
+		SELECT code, name
+		FROM ticket_categories
+		ORDER BY name ASC
+	`)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load ticket categories"})
+		return
+	}
+	defer rows.Close()
+
+	type Item struct {
+		Code string `json:"code"`
+		Name string `json:"name"`
+	}
+	out := []Item{}
+
+	for rows.Next() {
+		var it Item
+		if err := rows.Scan(&it.Code, &it.Name); err == nil {
+			out = append(out, it)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": out})
+}
+
+func GetServices(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	rows, err := database.Pool.Query(ctx, `
+		SELECT code, name
+		FROM services
+		ORDER BY name ASC
+	`)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load services"})
+		return
+	}
+	defer rows.Close()
+
+	type Item struct {
+		Code string `json:"code"`
+		Name string `json:"name"`
+	}
+	out := []Item{}
+
+	for rows.Next() {
+		var it Item
+		if err := rows.Scan(&it.Code, &it.Name); err == nil {
+			out = append(out, it)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": out})
+}
+
 // =====================================================================
 // 🔹 Helpers
 // =====================================================================

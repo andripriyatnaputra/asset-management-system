@@ -173,9 +173,9 @@ export default function TicketsPage() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={6} className="text-center h-24 text-muted-foreground">Memuat data…</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center h-24 text-muted-foreground">Memuat data…</TableCell></TableRow>
             ) : filteredAndSorted.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center h-24 text-muted-foreground">Tidak ada tiket.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center h-24 text-muted-foreground">Tidak ada tiket.</TableCell></TableRow>
             ) : (
               filteredAndSorted.map((t) => (
                 <TableRow key={t.id} onClick={() => navigate(`/tickets/${t.id}`)} className="cursor-pointer hover:bg-muted/50">

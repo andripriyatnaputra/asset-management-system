@@ -146,6 +146,8 @@ func main() {
 			authenticated.GET("/tickets", handlers.GetAllTickets)
 			authenticated.GET("/tickets/:id", handlers.GetTicketByID)
 			authenticated.GET("/tickets/:id/history", handlers.GetTicketHistory)
+			authenticated.GET("/ticket-categories", handlers.GetTicketCategories)
+			authenticated.GET("/services", handlers.GetServices)
 			authenticated.GET("/dashboard/stats", handlers.GetDashboardStats)
 			authenticated.GET("/dashboard/sla", handlers.GetSLADashboard)
 			authenticated.POST("/employees/:id/trainings", handlers.AddEmployeeTraining)
