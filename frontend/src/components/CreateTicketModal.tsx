@@ -83,27 +83,61 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }: Props)
   }, [isOpen, category, service, impact, urgency])
 
   // ======================================================
-  // 🔹 Load Employees & Assets
+  // 🔹 Load Employees & Assets (FIX pagination)
   // ======================================================
   useEffect(() => {
     if (!isOpen) return
 
-    apiClient
-      .get('/employees')
-      .then((r) => setEmployees(normalizeList(r)))
-      .catch(() => {
-        setEmployees([])
-        toast.error('Gagal memuat karyawan')
-      })
+    let cancelled = false
 
-    apiClient
-      .get('/assets')
-      .then((r) => setAssets(normalizeList(r)))
-      .catch(() => {
-        setAssets([])
-        // optional: toast.error('Gagal memuat asset')
-      })
+    const fetchAllEmployees = async () => {
+      try {
+        const res = await apiClient.get('/employees', {
+          params: { page: 1, limit: 1000 },
+        })
+        if (!cancelled) setEmployees(normalizeList(res))
+      } catch {
+        if (!cancelled) {
+          setEmployees([])
+          toast.error('Gagal memuat karyawan')
+        }
+      }
+    }
+
+    const fetchAllAssets = async () => {
+      try {
+        const all: AssetItem[] = []
+
+        const first = await apiClient.get('/assets', {
+          params: { page: 1, limit: 10 },
+        })
+
+        all.push(...normalizeList(first))
+
+        const totalPages: number =
+          first?.data?.pagination?.total_pages ?? 1
+
+        for (let page = 2; page <= totalPages; page++) {
+          const res = await apiClient.get('/assets', {
+            params: { page, limit: 10 },
+          })
+          all.push(...normalizeList(res))
+        }
+
+        if (!cancelled) setAssets(all)
+      } catch {
+        if (!cancelled) setAssets([])
+      }
+    }
+
+    fetchAllEmployees()
+    fetchAllAssets()
+
+    return () => {
+      cancelled = true
+    }
   }, [isOpen])
+
 
   // ======================================================
   // 🔹 Auto-Map Category & Service dari Asset
