@@ -56,11 +56,14 @@ export default function TicketDetailPage() {
   const [assignee, setAssignee] = useState("unassigned"); 
   
   useEffect(() => {
-    if (['super_admin', 'it_support'].includes(userRole || '')) {
-      apiClient.get('/employees')
-        .then(res => setEmployees(res.data?.data ?? res.data ?? []))
-        .catch(() => toast.error('Gagal memuat daftar karyawan'))
-    }
+    if (!['super_admin', 'it_support'].includes(userRole || '')) return
+
+    apiClient.get('/employees', { params: { page: 1, limit: 1000 } })
+      .then(res => {
+        const data = res.data?.data ?? res.data ?? []
+        setEmployees(Array.isArray(data) ? data : [])
+      })
+      .catch(() => toast.error('Gagal memuat daftar karyawan'))
   }, [userRole])
 
   const handleAssign = (value: string) => {
@@ -145,7 +148,7 @@ export default function TicketDetailPage() {
       Array.from(files).forEach(f => form.append('attachments', f))
       p = apiClient.post(`/tickets/${id}/comments`, form, { headers: { 'Content-Type': 'multipart/form-data' } })
     } else {
-      p = apiClient.post(`/tickets/${id}/comments`, { comment_text: newComment.trim() })
+      p = apiClient.post(`/tickets/${id}/comments`, { comment: newComment.trim() })
     }
 
     toast.promise(p, {
@@ -163,15 +166,18 @@ export default function TicketDetailPage() {
   // ============================================================
   // 🔹 Update tiket (status / assignee / escalate)
   // ============================================================
-  const update = (payload: any) => {
+  const update = (payload: any, successMsg = 'Tiket diperbarui!') => {
     if (!payload || Object.keys(payload).length === 0) return
     const p = apiClient.put(`/tickets/${id}`, payload)
     toast.promise(p, {
       loading: 'Memperbarui...',
-      success: () => { fetchTicket(); return 'Tiket diperbarui!' },
-      error: 'Gagal memperbarui tiket.'
+      success: () => {
+        fetchTicket()
+        return successMsg
+      },
+      error: (e) => e?.response?.data?.error || 'Gagal memperbarui tiket.'
     })
-  }
+}
 
   const getStatusVariant = (s: string) => {
     switch (s.toLowerCase()) {
@@ -253,27 +259,27 @@ export default function TicketDetailPage() {
             </SelectContent>
           </Select>
             {ticket.status !== 'Closed' && (
-              <Button variant="outline" onClick={() => update({ escalate: true })}>
+              <Button variant="outline" onClick={() => update({ escalate: true }, 'Ticket berhasil di-escalate')}>
                 Escalate Ticket
               </Button>
             )}
             {ticket.status === 'Open' && (
-              <Button variant="secondary" onClick={() => update({ status: 'In Progress' })}>
+              <Button variant="secondary" onClick={() => update({ status: 'In Progress' }, 'Status diubah: In Progress')}>
                 Start Progress
               </Button>
             )}
             {ticket.status === 'In Progress' && (
-              <Button variant="blue" onClick={() => update({ status: 'Resolved' })}>
+              <Button variant="blue" onClick={() => update({ status: 'Resolved' }, 'Status diubah: Resolved')}>
                 Mark Resolved
               </Button>
             )}
             {ticket.status === 'Resolved' && (
-              <Button variant="destructive" onClick={() => update({ status: 'Closed' })}>
+              <Button variant="destructive" onClick={() => update({ status: 'Closed' }, 'Ticket ditutup (Closed)')}>
                 Close Ticket
               </Button>
             )}
             {ticket.status === 'Closed' && (
-              <Button variant="default" onClick={() => update({ status: 'Open' })}>
+              <Button variant="default" onClick={() => update({ status: 'Open' }, 'Ticket dibuka kembali (Reopen)')}>
                 Reopen Ticket
               </Button>
             )}
