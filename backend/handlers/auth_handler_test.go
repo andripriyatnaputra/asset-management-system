@@ -68,7 +68,8 @@ func sanitizeInitSQLForTests(sql string) string {
 			strings.HasPrefix(trimmed, "GRANT ") ||
 			strings.HasPrefix(trimmed, "REVOKE ") ||
 			strings.HasPrefix(trimmed, "ALTER DEFAULT PRIVILEGES") ||
-			strings.HasPrefix(trimmed, "SET SESSION AUTHORIZATION")
+			strings.HasPrefix(trimmed, "SET SESSION AUTHORIZATION") ||
+			strings.Contains(trimmed, "set_config('search_path', '', false)")
 
 		if skipLine {
 			continue
