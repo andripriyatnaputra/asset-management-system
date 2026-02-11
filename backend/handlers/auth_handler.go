@@ -40,7 +40,7 @@ func Login(c *gin.Context) {
 
 	query := `
 			SELECT id, email, password_hash, role, name, department_id
-			FROM employees 
+			FROM public.employees 
 			WHERE email = $1 AND deleted_at IS NULL
 		`
 	err := database.Pool.QueryRow(context.Background(), query, req.Email).Scan(
@@ -77,7 +77,7 @@ func Login(c *gin.Context) {
 	// 🕓 Async update last login
 	go func() {
 		_, _ = database.Pool.Exec(context.Background(),
-			`UPDATE employees SET last_login_at = $1 WHERE id = $2`,
+			`UPDATE public.employees SET last_login_at = $1 WHERE id = $2`,
 			time.Now(), user.ID)
 	}()
 
@@ -170,7 +170,7 @@ func ChangePassword(c *gin.Context) {
 
 	var currentPasswordHash string
 	err := database.Pool.QueryRow(context.Background(),
-		`SELECT password_hash FROM employees WHERE id = $1 AND deleted_at IS NULL`,
+		`SELECT password_hash FROM public.employees WHERE id = $1 AND deleted_at IS NULL`,
 		userID).Scan(&currentPasswordHash)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
@@ -189,7 +189,7 @@ func ChangePassword(c *gin.Context) {
 	}
 
 	_, err = database.Pool.Exec(context.Background(),
-		`UPDATE employees SET password_hash = $1 WHERE id = $2`, newHash, userID)
+		`UPDATE public.employees SET password_hash = $1 WHERE id = $2`, newHash, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update password"})
 		return

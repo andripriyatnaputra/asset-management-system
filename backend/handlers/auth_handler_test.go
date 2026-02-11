@@ -68,7 +68,8 @@ func sanitizeInitSQLForTests(sql string) string {
 			strings.HasPrefix(trimmed, "GRANT ") ||
 			strings.HasPrefix(trimmed, "REVOKE ") ||
 			strings.HasPrefix(trimmed, "ALTER DEFAULT PRIVILEGES") ||
-			strings.HasPrefix(trimmed, "SET SESSION AUTHORIZATION")
+			strings.HasPrefix(trimmed, "SET SESSION AUTHORIZATION") ||
+			strings.Contains(trimmed, "set_config('search_path', '', false)")
 
 		if skipLine {
 			continue
@@ -92,7 +93,7 @@ func TestLoginHandler(t *testing.T) {
 
 	// Setup: Hapus semua data dari tabel (kecuali data awal dari init.sql)
 	// Kita gunakan TRUNCATE untuk reset cepat
-	database.Pool.Exec(context.Background(), "TRUNCATE TABLE asset_assignments, assets, employees, departments RESTART IDENTITY CASCADE")
+	database.Pool.Exec(context.Background(), "TRUNCATE TABLE employees, departments RESTART IDENTITY CASCADE")
 	_, err := database.Pool.Exec(context.Background(), "INSERT INTO departments (id, name) VALUES (1, 'IT Test') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name")
 	assert.NoError(t, err)
 
@@ -100,7 +101,7 @@ func TestLoginHandler(t *testing.T) {
 	password := "password123"
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	_, err = database.Pool.Exec(context.Background(),
-		`INSERT INTO employees (employee_nik, name, email, password_hash, role, department_id) 
+		`INSERT INTO public.employees (employee_nik, name, email, password_hash, role, department_id) 
 		 VALUES ('TEST-001', 'Test User', 'test@example.com', $1, 'employee', 1)`,
 		string(hashedPassword))
 	assert.NoError(t, err)
