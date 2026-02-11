@@ -42,34 +42,66 @@ export default function AssignAssetModal({
   const [employees, setEmployees] = useState<Employee[]>([])
   const [employeeId, setEmployeeId] = useState<string>("")
   const [submitting, setSubmitting] = useState(false)
+  const [loadingEmployees, setLoadingEmployees] = useState(false)
 
-  // load employees setiap modal dibuka
+  const normalizeList = (res: any) =>
+    Array.isArray(res?.data?.data) ? res.data.data :
+    Array.isArray(res?.data) ? res.data :
+    []
+
+  // ✅ Load ALL employees (respect pagination)
   useEffect(() => {
     if (!isOpen) return
 
-    apiClient
-      .get("/employees")
-      .then((res) => {
-        const data = Array.isArray(res?.data?.data)
-          ? res.data.data
-          : Array.isArray(res?.data)
-          ? res.data
-          : []
-        setEmployees(data)
-      })
-      .catch(() => {
-        toast.error("Gagal memuat daftar karyawan.")
-        setEmployees([])
-      })
+    let cancelled = false
+
+    const fetchAllEmployees = async () => {
+      setLoadingEmployees(true)
+      try {
+        const all: Employee[] = []
+
+        // fetch page 1
+        const first = await apiClient.get("/employees", {
+          params: { page: 1, limit: 10 },
+        })
+
+        const firstRows = normalizeList(first)
+        all.push(...firstRows)
+
+        const totalPages: number = first?.data?.pagination?.total_pages ?? 1
+
+        // fetch remaining pages
+        for (let page = 2; page <= totalPages; page++) {
+          const res = await apiClient.get("/employees", {
+            params: { page, limit: 10 },
+          })
+          all.push(...normalizeList(res))
+        }
+
+        if (!cancelled) setEmployees(all)
+      } catch {
+        if (!cancelled) {
+          setEmployees([])
+          toast.error("Gagal memuat daftar karyawan.")
+        }
+      } finally {
+        if (!cancelled) setLoadingEmployees(false)
+      }
+    }
+
+    fetchAllEmployees()
+
+    return () => {
+      cancelled = true
+    }
   }, [isOpen])
 
-  // optional: sort biar lebih enak dicari (NIK dulu, lalu name)
   const sortedEmployees = useMemo(() => {
     const list = Array.isArray(employees) ? employees : []
     return [...list].sort((a, b) => {
-      const an = (a.employee_nik || "").toString()
-      const bn = (b.employee_nik || "").toString()
-      if (an && bn && an !== bn) return an.localeCompare(bn)
+      const anik = (a.employee_nik || "").toString()
+      const bnik = (b.employee_nik || "").toString()
+      if (anik && bnik && anik !== bnik) return anik.localeCompare(bnik)
       return (a.name || "").localeCompare(b.name || "")
     })
   }, [employees])
@@ -107,8 +139,6 @@ export default function AssignAssetModal({
         onAssigned()
         onClose()
       }
-    } catch (err) {
-      console.error("[AssignAssetModal] Error:", err)
     } finally {
       setSubmitting(false)
     }
@@ -126,23 +156,25 @@ export default function AssignAssetModal({
 
           <Select value={employeeId} onValueChange={setEmployeeId}>
             <SelectTrigger>
-              <SelectValue placeholder="Pilih karyawan">
+              <SelectValue placeholder={loadingEmployees ? "Memuat karyawan..." : "Pilih karyawan"}>
                 {selectedEmployeeLabel || undefined}
               </SelectValue>
             </SelectTrigger>
 
-            {/* ✅ max-h + overflow biar bisa scroll */}
+            {/* ✅ scroll */}
             <SelectContent className="max-h-72 overflow-y-auto">
-              {sortedEmployees.length === 0 ? (
+              {loadingEmployees ? (
+                <div className="text-muted-foreground text-sm px-2 py-2">
+                  Memuat data karyawan…
+                </div>
+              ) : sortedEmployees.length === 0 ? (
                 <div className="text-muted-foreground text-sm px-2 py-2">
                   Tidak ada data karyawan.
                 </div>
               ) : (
-                // ✅ Search pakai Command (lebih enak untuk list panjang)
-                <Command shouldFilter={true}>
+                <Command shouldFilter>
                   <CommandInput placeholder="Cari nama / NIK..." />
                   <CommandEmpty>Tidak ditemukan.</CommandEmpty>
-
                   <CommandGroup>
                     {sortedEmployees.map((e) => {
                       const value = String(e.id)
@@ -154,7 +186,7 @@ export default function AssignAssetModal({
                           value={`${e.name ?? ""} ${e.employee_nik ?? ""} ${value}`}
                           onSelect={() => setEmployeeId(value)}
                         >
-                          {/* SelectItem butuh jadi wrapper item selectable; kita render sebagai label saja */}
+                          {/* tampilkan label */}
                           <SelectItem value={value}>{label}</SelectItem>
                         </CommandItem>
                       )
@@ -170,7 +202,7 @@ export default function AssignAssetModal({
           <Button variant="outline" onClick={onClose}>
             Batal
           </Button>
-          <Button onClick={handleAssign} disabled={submitting}>
+          <Button onClick={handleAssign} disabled={submitting || loadingEmployees}>
             {submitting ? "Meng-assign…" : "Assign"}
           </Button>
         </DialogFooter>
