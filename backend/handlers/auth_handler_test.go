@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/andripriyatnaputra/asset-management-system/backend/database"
@@ -42,8 +43,12 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatalf("Could not read init.sql file: %v", err)
 	}
-	_, err = database.Pool.Exec(context.Background(), string(sqlBytes))
-	if err != nil {
+
+	// init.sql hasil dump production memuat perintah ownership/grant yang bisa gagal
+	// di lingkungan tes lokal (contoh role "admin" tidak ada). Untuk tes handler,
+	// schema dan data awal tetap dibutuhkan, tapi ownership statement aman di-skip.
+	cleanedSQL := sanitizeInitSQLForTests(string(sqlBytes))
+	if err := executeSQLScriptForTests(context.Background(), cleanedSQL); err != nil {
 		log.Fatalf("Could not execute init.sql on test database: %v", err)
 	}
 	// -----------------------------------------------------------
@@ -52,6 +57,43 @@ func TestMain(m *testing.M) {
 	exitCode := m.Run()
 
 	os.Exit(exitCode)
+}
+
+func sanitizeInitSQLForTests(sql string) string {
+	var cleanedLines []string
+	for _, line := range strings.Split(sql, "\n") {
+		trimmed := strings.TrimSpace(line)
+		skipLine := strings.Contains(trimmed, " OWNER TO ") ||
+			strings.HasPrefix(trimmed, "GRANT ") ||
+			strings.HasPrefix(trimmed, "REVOKE ") ||
+			strings.HasPrefix(trimmed, "ALTER DEFAULT PRIVILEGES") ||
+			strings.HasPrefix(trimmed, "SET SESSION AUTHORIZATION")
+
+		if skipLine {
+			continue
+		}
+
+		cleanedLines = append(cleanedLines, line)
+	}
+
+	return strings.Join(cleanedLines, "\n")
+}
+
+func executeSQLScriptForTests(ctx context.Context, sqlScript string) error {
+	conn, err := database.Pool.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+
+	results, err := conn.Conn().PgConn().Exec(ctx, sqlScript).ReadAll()
+	if err != nil {
+		return err
+	}
+
+	// Pastikan seluruh result stream sudah dibaca agar error akhir script ikut tertangkap.
+	_ = results
+	return nil
 }
 
 func setupRouter() *gin.Engine {
