@@ -48,12 +48,9 @@ func TestMain(m *testing.M) {
 	// di lingkungan tes lokal (contoh role "admin" tidak ada). Untuk tes handler,
 	// schema dan data awal tetap dibutuhkan, tapi ownership statement aman di-skip.
 	cleanedSQL := sanitizeInitSQLForTests(string(sqlBytes))
-	if err := executeSQLScriptForTests(context.Background(), cleanedSQL); err != nil {
-		log.Printf("Could not execute full init.sql on test database, fallback to minimal auth schema: %v", err)
-	}
-
-	if err := ensureAuthTestSchema(context.Background()); err != nil {
-		log.Fatalf("Could not ensure minimal auth schema for tests: %v", err)
+	_, err = database.Pool.Exec(context.Background(), cleanedSQL)
+	if err != nil {
+		log.Fatalf("Could not execute init.sql on test database: %v", err)
 	}
 	// -----------------------------------------------------------
 
@@ -83,46 +80,6 @@ func sanitizeInitSQLForTests(sql string) string {
 	return strings.Join(cleanedLines, "\n")
 }
 
-func executeSQLScriptForTests(ctx context.Context, sqlScript string) error {
-	conn, err := database.Pool.Acquire(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Release()
-
-	results, err := conn.Conn().PgConn().Exec(ctx, sqlScript).ReadAll()
-	if err != nil {
-		return err
-	}
-
-	// Pastikan seluruh result stream sudah dibaca agar error akhir script ikut tertangkap.
-	_ = results
-	return nil
-}
-
-func ensureAuthTestSchema(ctx context.Context) error {
-	ddl := `
-		CREATE TABLE IF NOT EXISTS public.departments (
-			id BIGSERIAL PRIMARY KEY,
-			name VARCHAR(100) NOT NULL UNIQUE
-		);
-
-		CREATE TABLE IF NOT EXISTS public.employees (
-			id BIGSERIAL PRIMARY KEY,
-			employee_nik VARCHAR(30) UNIQUE,
-			name VARCHAR(120) NOT NULL,
-			email VARCHAR(120) NOT NULL UNIQUE,
-			password_hash TEXT NOT NULL,
-			role VARCHAR(20) NOT NULL DEFAULT 'employee',
-			department_id BIGINT REFERENCES public.departments(id),
-			deleted_at TIMESTAMPTZ,
-			last_login_at TIMESTAMPTZ
-		);
-	`
-	_, err := database.Pool.Exec(ctx, ddl)
-	return err
-}
-
 func setupRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.Default()
@@ -135,8 +92,8 @@ func TestLoginHandler(t *testing.T) {
 
 	// Setup: Hapus semua data dari tabel (kecuali data awal dari init.sql)
 	// Kita gunakan TRUNCATE untuk reset cepat
-	database.Pool.Exec(context.Background(), "TRUNCATE TABLE public.employees, public.departments RESTART IDENTITY CASCADE")
-	_, err := database.Pool.Exec(context.Background(), "INSERT INTO public.departments (id, name) VALUES (1, 'IT Test') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name")
+	database.Pool.Exec(context.Background(), "TRUNCATE TABLE employees, departments RESTART IDENTITY CASCADE")
+	_, err := database.Pool.Exec(context.Background(), "INSERT INTO departments (id, name) VALUES (1, 'IT Test') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name")
 	assert.NoError(t, err)
 
 	// Setup: Buat user tes tambahan
