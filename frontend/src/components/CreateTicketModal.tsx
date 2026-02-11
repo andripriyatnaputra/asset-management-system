@@ -2,11 +2,23 @@ import { useEffect, useState } from 'react'
 import apiClient from '@/services/api'
 import { toast } from 'sonner'
 import type { Employee, AssetItem } from '@/types'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
 interface Props {
@@ -15,15 +27,18 @@ interface Props {
   onSuccess: () => void
 }
 
+type Priority = 'Low' | 'Medium' | 'High' | 'Critical'
+type ImpactUrgency = 'Low' | 'Medium' | 'High'
+
 export default function CreateTicketModal({ isOpen, onClose, onSuccess }: Props) {
   const [subject, setSubject] = useState('')
   const [description, setDescription] = useState('')
-  const [priority, setPriority] = useState<'Low'|'Medium'|'High'|'Critical'>('Medium')
+  const [priority, setPriority] = useState<Priority>('Medium')
 
   const [category, setCategory] = useState('INCIDENT')
   const [service, setService] = useState('ENDPOINT')
-  const [impact, setImpact] = useState<'Low'|'Medium'|'High'>('Medium')
-  const [urgency, setUrgency] = useState<'Low'|'Medium'|'High'>('Medium')
+  const [impact, setImpact] = useState<ImpactUrgency>('Medium')
+  const [urgency, setUrgency] = useState<ImpactUrgency>('Medium')
 
   const [employees, setEmployees] = useState<Employee[]>([])
   const [assignee, setAssignee] = useState<string>('unassigned')
@@ -31,35 +46,63 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }: Props)
   const [assets, setAssets] = useState<AssetItem[]>([])
   const [relatedAssetId, setRelatedAssetId] = useState<string>('none')
 
-  const [slaPreview, setSlaPreview] = useState<{policy_name:string, priority:string, response:number, resolve:number}|null>(null)
+  const [slaPreview, setSlaPreview] = useState<{
+    policy_name: string
+    priority: string
+    response: number
+    resolve: number
+  } | null>(null)
 
   // 🔹 Ambil role dan ID user dari localStorage/session
   const userRole = localStorage.getItem('userRole') || 'employee'
-  const currentUserId = Number(localStorage.getItem('userId'))
+  const currentUserIdRaw = localStorage.getItem('userId')
+  const currentUserId = currentUserIdRaw ? Number(currentUserIdRaw) : null
+
+  const isIT = userRole === 'it_support' || userRole === 'super_admin'
+
+  // helper: normalize response list agar selalu array
+  const normalizeList = (r: any) => {
+    if (Array.isArray(r?.data?.data)) return r.data.data
+    if (Array.isArray(r?.data)) return r.data
+    return []
+  }
 
   // ======================================================
   // 🔹 SLA Preview Auto Update
   // ======================================================
   useEffect(() => {
+    if (!isOpen) return
     if (!impact || !urgency) return
-    apiClient.get('/sla-policies/preview', {
-      params: { category_code: category, service_code: service, impact, urgency }
-    })
-      .then(res => setSlaPreview(res.data))
+
+    apiClient
+      .get('/sla-policies/preview', {
+        params: { category_code: category, service_code: service, impact, urgency },
+      })
+      .then((res) => setSlaPreview(res?.data ?? null))
       .catch(() => setSlaPreview(null))
-  }, [category, service, impact, urgency])
+  }, [isOpen, category, service, impact, urgency])
 
   // ======================================================
   // 🔹 Load Employees & Assets
   // ======================================================
   useEffect(() => {
     if (!isOpen) return
-    apiClient.get('/employees')
-      .then(r => setEmployees(r.data?.data ?? r.data ?? []))
-      .catch(() => toast.error('Gagal memuat karyawan'))
-    apiClient.get('/assets')
-      .then(r => setAssets(r.data?.data ?? r.data ?? []))
-      .catch(() => {/* opsional */})
+
+    apiClient
+      .get('/employees')
+      .then((r) => setEmployees(normalizeList(r)))
+      .catch(() => {
+        setEmployees([])
+        toast.error('Gagal memuat karyawan')
+      })
+
+    apiClient
+      .get('/assets')
+      .then((r) => setAssets(normalizeList(r)))
+      .catch(() => {
+        setAssets([])
+        // optional: toast.error('Gagal memuat asset')
+      })
   }, [isOpen])
 
   // ======================================================
@@ -67,16 +110,36 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }: Props)
   // ======================================================
   useEffect(() => {
     if (relatedAssetId === 'none') return
-    const selected = assets.find(a => String(a.id) === relatedAssetId)
+    const safeAssets = Array.isArray(assets) ? assets : []
+    const selected = safeAssets.find((a) => String(a.id) === relatedAssetId)
     if (!selected) return
-    if (selected.category_code && selected.category_code !== category) setCategory(selected.category_code)
-    if (selected.service_code && selected.service_code !== service) setService(selected.service_code)
-  }, [relatedAssetId, assets])
+
+    if (selected.category_code && selected.category_code !== category) {
+      setCategory(selected.category_code)
+    }
+    if (selected.service_code && selected.service_code !== service) {
+      setService(selected.service_code)
+    }
+  }, [relatedAssetId, assets, category, service])
 
   // ======================================================
   // 🔹 Submit Ticket
   // ======================================================
   const [submitting, setSubmitting] = useState(false)
+
+  const resetForm = () => {
+    setSubject('')
+    setDescription('')
+    setPriority('Medium')
+    setCategory('INCIDENT')
+    setService('ENDPOINT')
+    setImpact('Medium')
+    setUrgency('Medium')
+    setRelatedAssetId('none')
+    setAssignee('unassigned')
+    setSlaPreview(null)
+  }
+
   const submit = async () => {
     if (submitting) return
     if (!subject.trim()) return toast.error('Subjek wajib diisi.')
@@ -91,27 +154,25 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }: Props)
       urgency,
       related_asset_id: relatedAssetId !== 'none' ? Number(relatedAssetId) : null,
       // hanya kirim assigned_to jika role IT / Admin
-      assigned_to_employee_id: (userRole === 'it_support' || userRole === 'super_admin') && assignee !== 'unassigned'
-        ? Number(assignee)
-        : null,
+      assigned_to_employee_id:
+        isIT && assignee !== 'unassigned' ? Number(assignee) : null,
     }
 
     setSubmitting(true)
     try {
       const promise = apiClient.post('/tickets', payload)
+
       toast.promise(promise, {
         loading: 'Membuat tiket...',
         success: () => {
           onSuccess()
           onClose()
-          setSubject('')
-          setDescription('')
-          setRelatedAssetId('none')
-          setAssignee('unassigned')
+          resetForm()
           return 'Tiket berhasil dibuat!'
         },
         error: (e) => e?.response?.data?.error || 'Gagal membuat tiket',
       })
+
       await promise
     } finally {
       setSubmitting(false)
@@ -121,20 +182,42 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }: Props)
   // ======================================================
   // 🔹 Render Form
   // ======================================================
+  const safeEmployees = Array.isArray(employees) ? employees : []
+  const safeAssets = Array.isArray(assets) ? assets : []
+
+  const visibleAssets =
+    userRole === 'employee'
+      ? safeAssets.filter((a) =>
+          currentUserId ? a.assigned_to_employee_id === currentUserId : false
+        )
+      : safeAssets
+
   return (
-    <Dialog open={isOpen} onOpenChange={(open)=>{ if(!open) onClose() }}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
+    >
       <DialogContent>
-        <DialogHeader><DialogTitle>Buat Tiket Baru</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Buat Tiket Baru</DialogTitle>
+        </DialogHeader>
 
         <div className="grid gap-3">
           {/* --- Subject & Description --- */}
           <div>
             <Label>Subjek</Label>
-            <Input value={subject} onChange={e=>setSubject(e.target.value)} />
+            <Input value={subject} onChange={(e) => setSubject(e.target.value)} />
           </div>
+
           <div>
             <Label>Deskripsi</Label>
-            <Textarea value={description} onChange={e=>setDescription(e.target.value)} rows={4}/>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={4}
+            />
           </div>
 
           {/* --- Category & Service --- */}
@@ -142,17 +225,22 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }: Props)
             <div>
               <Label>Category</Label>
               <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="INCIDENT">Incident</SelectItem>
                   <SelectItem value="REQUEST">Service Request</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
             <div>
               <Label>Service</Label>
               <Select value={service} onValueChange={setService}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ENDPOINT">End-user Device</SelectItem>
                   <SelectItem value="EMAIL">Email</SelectItem>
@@ -166,8 +254,10 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }: Props)
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <Label>Impact</Label>
-              <Select value={impact} onValueChange={(v)=>setImpact(v as any)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select value={impact} onValueChange={(v) => setImpact(v as any)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Low">Low</SelectItem>
                   <SelectItem value="Medium">Medium</SelectItem>
@@ -175,10 +265,13 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }: Props)
                 </SelectContent>
               </Select>
             </div>
+
             <div>
               <Label>Urgency</Label>
-              <Select value={urgency} onValueChange={(v)=>setUrgency(v as any)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select value={urgency} onValueChange={(v) => setUrgency(v as any)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Low">Low</SelectItem>
                   <SelectItem value="Medium">Medium</SelectItem>
@@ -186,10 +279,13 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }: Props)
                 </SelectContent>
               </Select>
             </div>
+
             <div>
               <Label>Priority (opsional)</Label>
-              <Select value={priority} onValueChange={(v)=>setPriority(v as any)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select value={priority} onValueChange={(v) => setPriority(v as any)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Low">Low</SelectItem>
                   <SelectItem value="Medium">Medium</SelectItem>
@@ -203,8 +299,12 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }: Props)
           {/* --- SLA Preview --- */}
           {slaPreview && (
             <div className="border rounded-lg p-3 mt-3 bg-muted/30 text-xs text-muted-foreground">
-              <p><b>SLA Policy:</b> {slaPreview.policy_name}</p>
-              <p><b>Priority:</b> {slaPreview.priority}</p>
+              <p>
+                <b>SLA Policy:</b> {slaPreview.policy_name}
+              </p>
+              <p>
+                <b>Priority:</b> {slaPreview.priority}
+              </p>
               <p>Response Due: {slaPreview.response} menit</p>
               <p>Resolve Due: {slaPreview.resolve} menit</p>
             </div>
@@ -213,15 +313,19 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }: Props)
           {/* --- Assignment & Asset --- */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Hanya tampil untuk IT Support & Super Admin */}
-            {(userRole === 'it_support' || userRole === 'super_admin') && (
+            {isIT && (
               <div>
                 <Label>Assign ke</Label>
                 <Select value={assignee} onValueChange={setAssignee}>
-                  <SelectTrigger><SelectValue placeholder="Pilih assignee" /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih assignee" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">— Unassigned —</SelectItem>
-                    {employees.map(e => (
-                      <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>
+                    {safeEmployees.map((e) => (
+                      <SelectItem key={e.id} value={String(e.id)}>
+                        {e.name}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -231,18 +335,17 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }: Props)
             <div>
               <Label>Asset Terkait</Label>
               <Select value={relatedAssetId} onValueChange={setRelatedAssetId}>
-                <SelectTrigger><SelectValue placeholder="Pilih asset" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih asset" />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">— Tidak ada —</SelectItem>
-                  {assets
-                    .filter(a => userRole === 'employee'
-                      ? a.assigned_to_employee_id === currentUserId
-                      : true)
-                    .map(a => (
-                      <SelectItem key={a.id} value={String(a.id)}>
-                        {a.asset_tag} — {a.name}
-                      </SelectItem>
-                    ))}
+
+                  {visibleAssets.map((a) => (
+                    <SelectItem key={a.id} value={String(a.id)}>
+                      {a.asset_tag} — {a.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -250,7 +353,9 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }: Props)
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Batal</Button>
+          <Button variant="outline" onClick={onClose}>
+            Batal
+          </Button>
           <Button onClick={submit} disabled={submitting}>
             {submitting ? 'Membuat…' : 'Buat Tiket'}
           </Button>

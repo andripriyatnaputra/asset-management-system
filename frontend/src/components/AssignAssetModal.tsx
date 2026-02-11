@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import apiClient from "@/services/api"
 import { toast } from "sonner"
 import type { Employee } from "@/types"
@@ -10,6 +10,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -17,7 +18,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Label } from "@/components/ui/label"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command"
 
 interface AssignAssetModalProps {
   assetId: number
@@ -36,14 +43,19 @@ export default function AssignAssetModal({
   const [employeeId, setEmployeeId] = useState<string>("")
   const [submitting, setSubmitting] = useState(false)
 
-  // 🔹 Load employees setiap modal dibuka
+  // load employees setiap modal dibuka
   useEffect(() => {
     if (!isOpen) return
+
     apiClient
       .get("/employees")
       .then((res) => {
-        const data = res.data?.data ?? res.data ?? []
-        setEmployees(Array.isArray(data) ? data : [])
+        const data = Array.isArray(res?.data?.data)
+          ? res.data.data
+          : Array.isArray(res?.data)
+          ? res.data
+          : []
+        setEmployees(data)
       })
       .catch(() => {
         toast.error("Gagal memuat daftar karyawan.")
@@ -51,7 +63,24 @@ export default function AssignAssetModal({
       })
   }, [isOpen])
 
-  // 🔹 Handler submit assign
+  // optional: sort biar lebih enak dicari (NIK dulu, lalu name)
+  const sortedEmployees = useMemo(() => {
+    const list = Array.isArray(employees) ? employees : []
+    return [...list].sort((a, b) => {
+      const an = (a.employee_nik || "").toString()
+      const bn = (b.employee_nik || "").toString()
+      if (an && bn && an !== bn) return an.localeCompare(bn)
+      return (a.name || "").localeCompare(b.name || "")
+    })
+  }, [employees])
+
+  const selectedEmployeeLabel = useMemo(() => {
+    if (!employeeId) return ""
+    const e = sortedEmployees.find((x) => String(x.id) === employeeId)
+    if (!e) return ""
+    return `${e.employee_nik ? `[${e.employee_nik}] ` : ""}${e.name}`
+  }, [employeeId, sortedEmployees])
+
   const handleAssign = async () => {
     if (submitting) return
     if (!employeeId) {
@@ -65,7 +94,6 @@ export default function AssignAssetModal({
         employee_id: Number(employeeId),
       })
 
-      // Tampilkan toast berbasis promise
       toast.promise(promise, {
         loading: "Meng-assign aset...",
         success: "Aset berhasil diassign.",
@@ -74,11 +102,10 @@ export default function AssignAssetModal({
           "Gagal meng-assign aset. Periksa koneksi atau status aset.",
       })
 
-      // Tunggu hasil Axios-nya
       const res = await promise
       if (res.status === 200) {
-        onAssigned() // trigger reload di parent
-        onClose()    // tutup modal
+        onAssigned()
+        onClose()
       }
     } catch (err) {
       console.error("[AssignAssetModal] Error:", err)
@@ -86,8 +113,6 @@ export default function AssignAssetModal({
       setSubmitting(false)
     }
   }
-
-
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -98,22 +123,44 @@ export default function AssignAssetModal({
 
         <div className="space-y-3 py-2">
           <Label>Pilih Karyawan</Label>
+
           <Select value={employeeId} onValueChange={setEmployeeId}>
             <SelectTrigger>
-              <SelectValue placeholder="Pilih karyawan" />
+              <SelectValue placeholder="Pilih karyawan">
+                {selectedEmployeeLabel || undefined}
+              </SelectValue>
             </SelectTrigger>
-            <SelectContent>
-              {employees.length === 0 ? (
-                <p className="text-muted-foreground text-sm px-2 py-1">
+
+            {/* ✅ max-h + overflow biar bisa scroll */}
+            <SelectContent className="max-h-72 overflow-y-auto">
+              {sortedEmployees.length === 0 ? (
+                <div className="text-muted-foreground text-sm px-2 py-2">
                   Tidak ada data karyawan.
-                </p>
+                </div>
               ) : (
-                employees.map((e) => (
-                  <SelectItem key={e.id} value={String(e.id)}>
-                    {e.employee_nik ? `[${e.employee_nik}] ` : ""}
-                    {e.name}
-                  </SelectItem>
-                ))
+                // ✅ Search pakai Command (lebih enak untuk list panjang)
+                <Command shouldFilter={true}>
+                  <CommandInput placeholder="Cari nama / NIK..." />
+                  <CommandEmpty>Tidak ditemukan.</CommandEmpty>
+
+                  <CommandGroup>
+                    {sortedEmployees.map((e) => {
+                      const value = String(e.id)
+                      const label = `${e.employee_nik ? `[${e.employee_nik}] ` : ""}${e.name}`
+
+                      return (
+                        <CommandItem
+                          key={e.id}
+                          value={`${e.name ?? ""} ${e.employee_nik ?? ""} ${value}`}
+                          onSelect={() => setEmployeeId(value)}
+                        >
+                          {/* SelectItem butuh jadi wrapper item selectable; kita render sebagai label saja */}
+                          <SelectItem value={value}>{label}</SelectItem>
+                        </CommandItem>
+                      )
+                    })}
+                  </CommandGroup>
+                </Command>
               )}
             </SelectContent>
           </Select>
