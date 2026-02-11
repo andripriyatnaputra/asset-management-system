@@ -372,8 +372,14 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }: Props)
                 <SelectTrigger>
                   <SelectValue placeholder="Pilih asset" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-72 overflow-y-auto">
                   <SelectItem value="none">— Tidak ada —</SelectItem>
+
+                  {visibleAssets.length === 0 && (
+                    <div className="text-xs text-muted-foreground px-2 py-2">
+                      Tidak ada asset terkait.
+                    </div>
+                  )}
 
                   {visibleAssets.map((a) => (
                     <SelectItem key={a.id} value={String(a.id)}>
