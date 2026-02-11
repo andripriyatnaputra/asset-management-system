@@ -92,7 +92,7 @@ func TestLoginHandler(t *testing.T) {
 
 	// Setup: Hapus semua data dari tabel (kecuali data awal dari init.sql)
 	// Kita gunakan TRUNCATE untuk reset cepat
-	database.Pool.Exec(context.Background(), "TRUNCATE TABLE asset_assignments, assets, employees, departments RESTART IDENTITY CASCADE")
+	database.Pool.Exec(context.Background(), "TRUNCATE TABLE employees, departments RESTART IDENTITY CASCADE")
 	_, err := database.Pool.Exec(context.Background(), "INSERT INTO departments (id, name) VALUES (1, 'IT Test') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name")
 	assert.NoError(t, err)
 
