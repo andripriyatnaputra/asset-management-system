@@ -100,7 +100,7 @@ func TestLoginHandler(t *testing.T) {
 	password := "password123"
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	_, err = database.Pool.Exec(context.Background(),
-		`INSERT INTO employees (employee_nik, name, email, password_hash, role, department_id) 
+		`INSERT INTO public.employees (employee_nik, name, email, password_hash, role, department_id) 
 		 VALUES ('TEST-001', 'Test User', 'test@example.com', $1, 'employee', 1)`,
 		string(hashedPassword))
 	assert.NoError(t, err)
