@@ -11,11 +11,12 @@ import (
 	"github.com/andripriyatnaputra/asset-management-system/backend/database"
 	"github.com/andripriyatnaputra/asset-management-system/backend/middleware"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 )
 
 type LocationRow struct {
 	ID          int64      `json:"id"`
+	ParentID    *int64     `json:"parent_id,omitempty"`   // ✅ baru
+	ParentName  *string    `json:"parent_name,omitempty"` // ✅ opsional (hasil join)
 	Site        string     `json:"site"`
 	Building    *string    `json:"building,omitempty"`
 	Room        *string    `json:"room,omitempty"`
@@ -31,24 +32,31 @@ type LocationRow struct {
 // ============================================================
 func GetAllLocations(c *gin.Context) {
 	rows, err := database.Pool.Query(c.Request.Context(), `
-		SELECT
-			id,
-			site,
-			building,
-			room,
-			description,
-			status,
-			CONCAT(
-				site,
-				CASE WHEN building IS NOT NULL AND building <> '' THEN ' - ' || building ELSE '' END,
-				CASE WHEN room IS NOT NULL AND room <> '' THEN ' - ' || room ELSE '' END
-			) AS display,
-			created_at,
-			updated_at
-		FROM locations
-		WHERE status = 'active'
-		ORDER BY site, building NULLS LAST, room NULLS LAST
-	`)
+    SELECT
+      l.id,
+      l.parent_id,
+      p.site AS parent_name,
+      l.site,
+      l.building,
+      l.room,
+      l.description,
+      l.status,
+      CONCAT(
+        COALESCE(p.site || ' > ', ''),
+        l.site,
+        CASE WHEN l.building IS NOT NULL AND l.building <> '' THEN ' - ' || l.building ELSE '' END,
+        CASE WHEN l.room IS NOT NULL AND l.room <> '' THEN ' - ' || l.room ELSE '' END
+      ) AS display,
+      l.created_at,
+      l.updated_at
+    FROM locations l
+    LEFT JOIN locations p ON p.id = l.parent_id
+    WHERE l.status = 'active'
+    ORDER BY
+      COALESCE(p.site, l.site),
+      (l.parent_id IS NULL) DESC,  -- parent tampil dulu
+      l.site, l.building NULLS LAST, l.room NULLS LAST
+  `)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to query locations"})
 		return
@@ -60,6 +68,8 @@ func GetAllLocations(c *gin.Context) {
 		var r LocationRow
 		if err := rows.Scan(
 			&r.ID,
+			&r.ParentID,
+			&r.ParentName,
 			&r.Site,
 			&r.Building,
 			&r.Room,
@@ -69,9 +79,6 @@ func GetAllLocations(c *gin.Context) {
 			&r.CreatedAt,
 			&r.UpdatedAt,
 		); err != nil {
-			if err == pgx.ErrNoRows {
-				break
-			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "scan error on locations"})
 			return
 		}
@@ -97,17 +104,32 @@ func CreateLocation(c *gin.Context) {
 		return
 	}
 
+	// sebelum insert: validasi parent jika diisi
+	if req.ParentID != nil {
+		var ok bool
+		_ = database.Pool.QueryRow(c.Request.Context(),
+			`SELECT EXISTS(SELECT 1 FROM locations WHERE id=$1 AND status='active')`,
+			*req.ParentID,
+		).Scan(&ok)
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid parent location"})
+			return
+		}
+	}
+
 	// 🔹 Prevent duplicate site+building+room
 	var exists bool
+	// duplicate guard: tambahkan parent_id
 	_ = database.Pool.QueryRow(c.Request.Context(),
 		`SELECT EXISTS(
-			SELECT 1 FROM locations 
-			WHERE site=$1 
-			  AND COALESCE(building,'') = COALESCE($2,'') 
-			  AND COALESCE(room,'') = COALESCE($3,'')
-			  AND status='active'
-		)`,
-		req.Site, req.Building, req.Room,
+		SELECT 1 FROM locations
+		WHERE COALESCE(parent_id,0)=COALESCE($1,0)
+		AND site=$2
+		AND COALESCE(building,'') = COALESCE($3,'')
+		AND COALESCE(room,'') = COALESCE($4,'')
+		AND status='active'
+	)`,
+		req.ParentID, req.Site, req.Building, req.Room,
 	).Scan(&exists)
 
 	if exists {
@@ -122,10 +144,10 @@ func CreateLocation(c *gin.Context) {
 	}
 
 	err := database.Pool.QueryRow(context.Background(),
-		`INSERT INTO locations (site, building, room, description, status, created_at, updated_at, created_by, updated_by)
-		 VALUES ($1,$2,$3,$4,'active',NOW(),NOW(),$5,$5)
-		 RETURNING id`,
-		req.Site, req.Building, req.Room, req.Description, userID,
+		`INSERT INTO locations (parent_id, site, building, room, description, status, created_at, updated_at, created_by, updated_by)
+		VALUES ($1,$2,$3,$4,$5,'active',NOW(),NOW(),$6,$6)
+		RETURNING id`,
+		req.ParentID, req.Site, req.Building, req.Room, req.Description, userID,
 	).Scan(&req.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create location"})
@@ -148,18 +170,36 @@ func UpdateLocation(c *gin.Context) {
 		return
 	}
 
+	if req.ParentID != nil && int64(id) == *req.ParentID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "parent_id cannot be self"})
+		return
+	}
+
+	if req.ParentID != nil {
+		var ok bool
+		_ = database.Pool.QueryRow(c.Request.Context(),
+			`SELECT EXISTS(SELECT 1 FROM locations WHERE id=$1 AND status='active')`,
+			*req.ParentID,
+		).Scan(&ok)
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid parent location"})
+			return
+		}
+	}
+
 	// 🔹 Check duplicate ONLY if site/building/room changed
 	var exists bool
 	_ = database.Pool.QueryRow(c.Request.Context(),
 		`SELECT EXISTS(
 			SELECT 1 FROM locations
-			 WHERE site=$1
-			   AND COALESCE(building,'') = COALESCE($2,'')
-			   AND COALESCE(room,'') = COALESCE($3,'')
-			   AND id <> $4
-			   AND status='active'
+			WHERE COALESCE(parent_id,0)=COALESCE($1,0)
+			AND site=$2
+			AND COALESCE(building,'') = COALESCE($3,'')
+			AND COALESCE(room,'') = COALESCE($4,'')
+			AND id <> $5
+			AND status='active'
 		)`,
-		req.Site, req.Building, req.Room, id,
+		req.ParentID, req.Site, req.Building, req.Room, id,
 	).Scan(&exists)
 
 	if exists {
@@ -175,12 +215,14 @@ func UpdateLocation(c *gin.Context) {
 
 	cmdTag, err := database.Pool.Exec(context.Background(),
 		`UPDATE locations
-        SET site=$1, building=$2, room=$3, description=$4,
-            status=$5,
-            updated_at=NOW(), updated_by=$6
-      WHERE id=$7`,
-		req.Site, req.Building, req.Room, req.Description,
+      SET parent_id=$1,
+          site=$2, building=$3, room=$4, description=$5,
+          status=$6,
+          updated_at=NOW(), updated_by=$7
+    WHERE id=$8`,
+		req.ParentID, req.Site, req.Building, req.Room, req.Description,
 		req.Status, userID, id)
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update location"})
 		return
@@ -212,6 +254,20 @@ func DeleteLocation(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{
 			"error":         "cannot delete location; assets still linked",
 			"assets_linked": assetCount,
+		})
+		return
+	}
+
+	// blok jika punya child aktif
+	var childCount int
+	_ = database.Pool.QueryRow(c.Request.Context(),
+		`SELECT COUNT(*) FROM locations WHERE parent_id=$1 AND status='active'`,
+		id,
+	).Scan(&childCount)
+	if childCount > 0 {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error":           "cannot delete location; it has child locations",
+			"children_linked": childCount,
 		})
 		return
 	}

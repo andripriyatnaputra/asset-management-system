@@ -11,12 +11,15 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { toast } from "sonner"
-import { PencilLine, Trash2, Plus, Search, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react"
+import {
+  PencilLine, Trash2, Plus, Search, ArrowUpDown, ChevronLeft, ChevronRight
+} from "lucide-react"
 import apiClient from "@/services/api"
 import LocationFormModal, { type Location } from "@/components/LocationFormModal"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 const pageSizeOptions = [10, 25, 50]
+const ROOT_VALUE = "__ROOT__"
 
 export default function LocationsPage() {
   const [list, setList] = useState<Location[]>([])
@@ -25,8 +28,13 @@ export default function LocationsPage() {
   const [sortAsc, setSortAsc] = useState(true)
   const [pageSize, setPageSize] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
+
   const [formOpen, setFormOpen] = useState(false)
   const [editItem, setEditItem] = useState<Location | null>(null)
+
+  // ✅ mode modal: parent vs normal (child)
+  const [modalMode, setModalMode] = useState<"normal" | "parent">("normal")
+
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [deleteItem, setDeleteItem] = useState<Location | null>(null)
 
@@ -34,13 +42,11 @@ export default function LocationsPage() {
     setLoading(true)
     try {
       const res = await apiClient.get("/locations")
-
       const raw = res.data?.data ?? res.data
       const safeData: Location[] = Array.isArray(raw) ? raw : []
-
       setList(safeData)
     } catch {
-      setList([]) // ⬅️ penting
+      setList([])
       toast.error("Gagal memuat data lokasi.")
     } finally {
       setLoading(false)
@@ -49,49 +55,87 @@ export default function LocationsPage() {
 
   useEffect(() => { fetchData() }, [])
 
+  // ================================
+  // FILTER + SORT (flat)
+  // ================================
   const filtered = useMemo(() => {
-    if (!Array.isArray(list)) return []
-
     const q = search.toLowerCase()
+
     let result = list.filter(l =>
-      l.site?.toLowerCase().includes(q) ||
+      (l.site ?? "").toLowerCase().includes(q) ||
       (l.building ?? "").toLowerCase().includes(q) ||
-      (l.room ?? "").toLowerCase().includes(q)
+      (l.room ?? "").toLowerCase().includes(q) ||
+      (l.parent_name ?? "").toLowerCase().includes(q)
     )
 
-    result.sort((a, b) =>
-      sortAsc
-        ? a.site.localeCompare(b.site)
-        : b.site.localeCompare(a.site)
-    )
+    result.sort((a, b) => {
+      const keyA = a.parent_name || a.site
+      const keyB = b.parent_name || b.site
+      return sortAsc ? keyA.localeCompare(keyB) : keyB.localeCompare(keyA)
+    })
 
     return result
   }, [list, search, sortAsc])
 
-
+  // ================================
+  // PAGINATION (flat agar stabil)
+  // ================================
   const totalPages = Math.ceil(filtered.length / pageSize)
-  const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const paginated = filtered.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  )
 
-  const handleDelete = async () => {
-    if (!deleteItem) return
-    try {
-      await apiClient.delete(`/locations/${deleteItem.id}`)
-      toast.success(`Lokasi "${deleteItem.site}" dihapus.`)
-      setConfirmOpen(false)
-      fetchData()
-    } catch {
-      toast.error("Gagal menghapus lokasi.")
+  // ================================
+  // GROUPING Parent -> Items
+  // ================================
+  const grouped = useMemo(() => {
+    const map = new Map<string, Location[]>()
+
+    for (const item of paginated) {
+      const key = item.parent_name || item.site
+      const arr = map.get(key) || []
+      arr.push(item)
+      map.set(key, arr)
     }
+
+    return Array.from(map.entries()).map(([parent, items]) => ({
+      parent,
+      items
+    }))
+  }, [paginated])
+
+  // ================================
+  // ACTIONS
+  // ================================
+  const openAddChild = () => {
+    setModalMode("normal")
+    setEditItem(null)
+    setFormOpen(true)
   }
 
-  const openAdd = () => {
+  const openAddParent = () => {
+    setModalMode("parent")
     setEditItem(null)
     setFormOpen(true)
   }
 
   const openEdit = (loc: Location) => {
+    setModalMode("normal")
     setEditItem(loc)
     setFormOpen(true)
+  }
+
+  const handleDelete = async () => {
+    if (!deleteItem) return
+    try {
+      await apiClient.delete(`/locations/${deleteItem.id}`)
+      toast.success(`Lokasi "${deleteItem.site}" dinonaktifkan.`)
+      setConfirmOpen(false)
+      fetchData()
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || "Gagal menghapus lokasi.")
+    }
   }
 
   const getStatusBadge = (status?: string) => {
@@ -116,41 +160,50 @@ export default function LocationsPage() {
           <CardTitle className="text-lg font-semibold flex items-center gap-2">
             🗺️ Manajemen Lokasi
           </CardTitle>
+
           <div className="flex items-center gap-2 mt-3 md:mt-0">
             <Search size={18} />
             <Input
-              placeholder="Cari site / building / room..."
+              placeholder="Cari site / building / room / parent..."
               value={search}
               onChange={(e) => { setSearch(e.target.value); setCurrentPage(1) }}
-              className="w-[240px]"
+              className="w-[260px]"
             />
+
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setSortAsc(!sortAsc)}
-              title="Urutkan site"
+              title="Urutkan berdasarkan parent/site"
             >
               <ArrowUpDown size={18} />
             </Button>
-            <Button onClick={openAdd} className="gap-1">
+
+            {/* ✅ Tambah Parent (root) */}
+            <Button variant="outline" onClick={openAddParent}>
+              + Parent
+            </Button>
+
+            {/* ✅ Tambah Child (normal) */}
+            <Button onClick={openAddChild} className="gap-1">
               <Plus size={16} /> Tambah
             </Button>
           </div>
         </CardHeader>
 
         <CardContent>
-          {/* Table */}
           <div className="overflow-x-auto rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Site</TableHead>
+                  <TableHead>Lokasi</TableHead>
                   <TableHead>Building</TableHead>
                   <TableHead>Room</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
+
               <TableBody>
                 {loading ? (
                   <TableRow>
@@ -158,47 +211,63 @@ export default function LocationsPage() {
                       Memuat data...
                     </TableCell>
                   </TableRow>
-                ) : paginated.length === 0 ? (
+                ) : grouped.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
                       Tidak ada lokasi.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  paginated.map(l => (
-                    <TableRow key={l.id} className="hover:bg-accent/40 transition-all">
-                      <TableCell>{l.site}</TableCell>
-                      <TableCell>{l.building || "-"}</TableCell>
-                      <TableCell>{l.room || "-"}</TableCell>
-                      <TableCell>{getStatusBadge(l.status)}</TableCell>
-                      <TableCell className="text-right">
-                        <TooltipProvider>
-                          <div className="flex justify-end gap-2">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button size="icon" variant="outline" onClick={() => openEdit(l)}>
-                                  <PencilLine size={16} />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Edit</TooltipContent>
-                            </Tooltip>
+                  grouped.map((group) => (
+                    <>
+                      {/* Parent Header */}
+                      <TableRow key={`parent-${group.parent}`} className="bg-muted/50">
+                        <TableCell colSpan={5} className="font-semibold">
+                          {group.parent}
+                        </TableCell>
+                      </TableRow>
 
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="icon"
-                                  variant="destructive"
-                                  onClick={() => { setDeleteItem(l); setConfirmOpen(true) }}
-                                >
-                                  <Trash2 size={16} />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Hapus</TooltipContent>
-                            </Tooltip>
-                          </div>
-                        </TooltipProvider>
-                      </TableCell>
-                    </TableRow>
+                      {/* Children/Items */}
+                      {group.items.map((l) => (
+                        <TableRow key={l.id} className="hover:bg-accent/40 transition-all">
+                          <TableCell className="pl-6">
+                            {l.parent_name ? "↳ " : ""}
+                            {l.site}
+                          </TableCell>
+                          <TableCell>{l.building || "-"}</TableCell>
+                          <TableCell>{l.room || "-"}</TableCell>
+                          <TableCell>{getStatusBadge(l.status)}</TableCell>
+
+                          <TableCell className="text-right">
+                            <TooltipProvider>
+                              <div className="flex justify-end gap-2">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button size="icon" variant="outline" onClick={() => openEdit(l)}>
+                                      <PencilLine size={16} />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Edit</TooltipContent>
+                                </Tooltip>
+
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="icon"
+                                      variant="destructive"
+                                      onClick={() => { setDeleteItem(l); setConfirmOpen(true) }}
+                                    >
+                                      <Trash2 size={16} />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Hapus</TooltipContent>
+                                </Tooltip>
+                              </div>
+                            </TooltipProvider>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </>
                   ))
                 )}
               </TableBody>
@@ -210,50 +279,42 @@ export default function LocationsPage() {
             <div className="flex items-center gap-2">
               <span>Baris per halaman:</span>
               <Select
-              value={String(pageSize)}
-              onValueChange={(v) => {
-                setPageSize(Number(v))
-                setCurrentPage(1)
-              }}
-            >
-              <SelectTrigger
-                className="
-                  w-[90px] text-sm 
-                  bg-background text-foreground 
-                  border-border
-                  focus:ring-2 focus:ring-ring focus:outline-none
-                  hover:bg-accent/50 transition-colors
-                "
+                value={String(pageSize)}
+                onValueChange={(v) => {
+                  setPageSize(Number(v))
+                  setCurrentPage(1)
+                }}
               >
-                <SelectValue placeholder="Size" />
-              </SelectTrigger>
-              <SelectContent
-                className="
-                  bg-popover text-popover-foreground
-                  border border-border shadow-md
-                "
-              >
-                {pageSizeOptions.map((size) => (
-                  <SelectItem
-                    key={size}
-                    value={String(size)}
-                    className="cursor-pointer text-sm focus:bg-accent focus:text-accent-foreground"
-                  >
-                    {size}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                <SelectTrigger className="w-[90px] text-sm">
+                  <SelectValue placeholder="Size" />
+                </SelectTrigger>
+                <SelectContent>
+                  {pageSizeOptions.map((size) => (
+                    <SelectItem key={size} value={String(size)}>
+                      {size}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+
             <div className="flex items-center gap-4">
               <span>Halaman {currentPage} dari {totalPages || 1}</span>
               <div className="flex gap-2">
-                <Button variant="outline" size="icon" disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                >
                   <ChevronLeft size={16} />
                 </Button>
-                <Button variant="outline" size="icon" disabled={currentPage === totalPages}
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  disabled={currentPage === totalPages || totalPages === 0}
+                  onClick={() => setCurrentPage(p => Math.min(totalPages || 1, p + 1))}
+                >
                   <ChevronRight size={16} />
                 </Button>
               </div>
@@ -268,20 +329,24 @@ export default function LocationsPage() {
         onClose={() => setFormOpen(false)}
         onSuccess={fetchData}
         location={editItem}
+        defaultParentValue={ROOT_VALUE}
+        lockParent={modalMode === "parent"}
       />
 
-      {/* Konfirmasi Hapus */}
+      {/* Konfirmasi Delete */}
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Hapus Lokasi</AlertDialogTitle>
+            <AlertDialogTitle>Nonaktifkan Lokasi</AlertDialogTitle>
             <AlertDialogDescription>
-              Anda yakin ingin menghapus lokasi "{deleteItem?.site}"?
+              Anda yakin ingin menonaktifkan lokasi "{deleteItem?.site}"?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Hapus</AlertDialogAction>
+            <AlertDialogAction onClick={handleDelete}>
+              Nonaktifkan
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
