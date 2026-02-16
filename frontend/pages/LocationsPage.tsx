@@ -208,7 +208,7 @@ export default function LocationsPage() {
                 {loading ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
-                      Memuat data...
+                      Memuat data....
                     </TableCell>
                   </TableRow>
                 ) : grouped.length === 0 ? (
