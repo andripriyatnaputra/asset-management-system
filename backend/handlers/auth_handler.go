@@ -43,7 +43,7 @@ func Login(c *gin.Context) {
 			FROM public.employees 
 			WHERE email = $1 AND deleted_at IS NULL
 		`
-	err := database.Pool.QueryRow(context.Background(), query, req.Email).Scan(
+	err := database.Pool.QueryRow(context.Background(), query, normalizedEmail).Scan(
 		&user.ID, &user.Email, &user.PasswordHash, &user.Role, &user.Name, &user.DepartmentID,
 	)
 
