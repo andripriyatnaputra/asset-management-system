@@ -940,12 +940,39 @@ CREATE INDEX IF NOT EXISTS idx_kg_edges_src                  ON public.kg_edges 
 CREATE INDEX IF NOT EXISTS idx_kg_nodes_type                 ON public.kg_nodes (entity_type);
 CREATE INDEX IF NOT EXISTS idx_licenses_compliance_status    ON public.licenses (compliance_status);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_locations_site          ON public.locations (COALESCE(parent_id, 0), site, COALESCE(building,''), COALESCE(room,'')) WHERE status = 'active';
+-- Tambah kolom problems yang mungkin belum ada di docker postgres
+ALTER TABLE public.problems
+  ADD COLUMN IF NOT EXISTS assigned_to        BIGINT,
+  ADD COLUMN IF NOT EXISTS created_by         BIGINT,
+  ADD COLUMN IF NOT EXISTS updated_by         BIGINT,
+  ADD COLUMN IF NOT EXISTS root_cause         TEXT,
+  ADD COLUMN IF NOT EXISTS workaround         TEXT,
+  ADD COLUMN IF NOT EXISTS known_error        BOOLEAN DEFAULT false NOT NULL,
+  ADD COLUMN IF NOT EXISTS permanent_solution TEXT,
+  ADD COLUMN IF NOT EXISTS related_asset_id   BIGINT,
+  ADD COLUMN IF NOT EXISTS updated_at         TIMESTAMPTZ DEFAULT now() NOT NULL,
+  ADD COLUMN IF NOT EXISTS resolved_at        TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS deleted_at         TIMESTAMPTZ;
+
 CREATE INDEX IF NOT EXISTS idx_problems_status               ON public.problems (status);
 CREATE INDEX IF NOT EXISTS idx_problems_assigned_to          ON public.problems (assigned_to);
-CREATE INDEX IF NOT EXISTS idx_problems_known_error          ON public.problems (known_error) WHERE known_error = true;
+DO $$ BEGIN
+  CREATE INDEX idx_problems_known_error ON public.problems (known_error) WHERE known_error = true;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+-- Tambah kolom role_delegations yang mungkin belum ada
+ALTER TABLE public.role_delegations
+  ADD COLUMN IF NOT EXISTS is_active   BOOLEAN DEFAULT true NOT NULL,
+  ADD COLUMN IF NOT EXISTS reason      TEXT,
+  ADD COLUMN IF NOT EXISTS revoked_at  TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS revoked_by  BIGINT;
+
 CREATE INDEX IF NOT EXISTS idx_role_delegations_active       ON public.role_delegations (start_date, end_date);
 CREATE INDEX IF NOT EXISTS idx_role_delegations_delegatee_id ON public.role_delegations (delegatee_id);
-CREATE INDEX IF NOT EXISTS idx_role_delegations_is_active    ON public.role_delegations (is_active) WHERE is_active = true;
+DO $$ BEGIN
+  CREATE INDEX idx_role_delegations_is_active ON public.role_delegations (is_active) WHERE is_active = true;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_ticket_attachments_comment_id ON public.ticket_attachments (comment_id);
 CREATE INDEX IF NOT EXISTS idx_ticket_comments_ticket_id     ON public.ticket_comments (ticket_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_sla_due_at            ON public.tickets (sla_due_at);
