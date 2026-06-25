@@ -17,20 +17,20 @@ type AuditSession struct {
 
 // AuditedAsset merepresentasikan hasil audit dari satu aset dalam sesi tertentu.
 type AuditedAsset struct {
-	ID                   int64      `json:"id" db:"id"`
-	SessionID            int64      `json:"session_id" db:"session_id"`
-	AssetID              int64      `json:"asset_id" db:"asset_id"`
-	Status               string     `json:"status" db:"status"` // found | missing | damaged
-	VerifiedByEmployeeID *int64     `json:"verified_by_employee_id,omitempty" db:"verified_by_employee_id"`
-	FoundAt              *time.Time `json:"found_at,omitempty" db:"found_at"`
-	Notes                *string    `json:"notes,omitempty" db:"notes"`
-	CreatedAt            time.Time  `json:"created_at" db:"created_at"`
+	ID          int64      `json:"id" db:"id"`
+	SessionID   int64      `json:"session_id" db:"session_id"`
+	AssetID     int64      `json:"asset_id" db:"asset_id"`
+	Status      string     `json:"status" db:"status"` // found | missing | damaged
+	VerifiedBy  *int64     `json:"verified_by,omitempty" db:"verified_by"`
+	VerifiedAt  *time.Time `json:"verified_at,omitempty" db:"verified_at"`
+	FoundAt     *time.Time `json:"found_at,omitempty" db:"found_at"`
+	Notes       *string    `json:"notes,omitempty" db:"notes"`
 
-	// 🔸 Transient linkage (optional)
-	AssetTag    *string `json:"asset_tag,omitempty"`
-	AssetName   *string `json:"asset_name,omitempty"`
-	VerifiedBy  *string `json:"verified_by,omitempty"`
-	SessionName *string `json:"session_name,omitempty"`
+	// 🔸 Transient linkage (optional join info)
+	AssetTag        *string `json:"asset_tag,omitempty"`
+	AssetName       *string `json:"asset_name,omitempty"`
+	VerifiedByName  *string `json:"verified_by_name,omitempty"`
+	SessionName     *string `json:"session_name,omitempty"`
 }
 
 // AuditLog merepresentasikan jejak aktivitas sistem (hash-chained log) — Grade A++ compliant.

@@ -46,6 +46,7 @@ func main() {
 
 	go services.RunAssetComplianceWatcher(ctx)
 	go services.RunAutoRemediationWatcher(ctx)
+	go services.RunNotificationJobs(ctx)
 	go func() {
 		ticker := time.NewTicker(6 * time.Hour)
 		defer ticker.Stop()
@@ -100,6 +101,7 @@ func main() {
 
 		// ---------- PUBLIC ----------
 		auth := api.Group("/auth")
+		auth.Use(middleware.RateLimitAuth())
 		{
 			auth.POST("/login", handlers.Login)
 			auth.POST("/refresh", handlers.RefreshToken)
@@ -107,7 +109,7 @@ func main() {
 
 		// ---------- AUTHENTICATED (ALL USERS) ----------
 		authenticated := api.Group("")
-		authenticated.Use(middleware.Authenticate())
+		authenticated.Use(middleware.Authenticate(), middleware.RateLimitAPI())
 		{
 			authenticated.PUT("/employees/me/change-password", handlers.ChangePassword)
 			authenticated.GET("/employees/me/assets", handlers.GetMyAssignedAssets)
@@ -162,6 +164,73 @@ func main() {
 			authenticated.GET("/employees/:id", handlers.GetEmployee)
 			authenticated.GET("/dashboard/kg-summary", handlers.GetKGSummary)
 
+			// Notifications (semua authenticated user)
+			authenticated.GET("/notifications", handlers.GetMyNotifications)
+			authenticated.GET("/notifications/unread-count", handlers.GetUnreadCount)
+			authenticated.PUT("/notifications/:id/read", handlers.MarkNotificationRead)
+			authenticated.PUT("/notifications/read-all", handlers.MarkAllRead)
+			authenticated.DELETE("/notifications/:id", handlers.DeleteNotification)
+
+			// Phase 7 — Webhooks (read — support+)
+			authenticated.GET("/webhooks", handlers.GetWebhooks)
+			authenticated.GET("/webhooks/:id/logs", handlers.GetWebhookDeliveryLogs)
+
+			// Phase 7 — QR Codes (read)
+			authenticated.GET("/assets/:id/qr", handlers.GetAssetQRData)
+			authenticated.GET("/assets/qr/lookup", handlers.LookupByQRData)
+
+			// Phase 7 — DR/BCP (read)
+			authenticated.GET("/dr/plans", handlers.GetAllDRPlans)
+			authenticated.GET("/dr/plans/:id", handlers.GetDRPlanByID)
+			authenticated.GET("/dr/tests", handlers.GetDRTests)
+			authenticated.GET("/dr/tests/:id", handlers.GetDRTestByID)
+			authenticated.GET("/dr/tests/:id/results", handlers.GetTestResults)
+
+			// Phase 6 — Compliance Reporting (read)
+			authenticated.GET("/compliance/frameworks", handlers.GetAllFrameworks)
+			authenticated.GET("/compliance/frameworks/:id", handlers.GetFrameworkByID)
+			authenticated.GET("/compliance/frameworks/:id/controls", handlers.GetControlsByFramework)
+			authenticated.GET("/compliance/controls/:id/evidence", handlers.GetEvidenceByControl)
+			authenticated.GET("/compliance/summary", handlers.GetComplianceSummaryByFramework)
+			authenticated.GET("/compliance/disposal", handlers.GetDisposalCompliance)
+
+			// Phase 6 — Vendor Performance (read)
+			authenticated.GET("/vendors/performance", handlers.GetAllVendorPerformance)
+			authenticated.GET("/vendors/performance/:id", handlers.GetVendorPerformanceByID)
+
+			// Phase 6 — Service Availability (read)
+			authenticated.GET("/services/availability", handlers.GetServiceAvailability)
+			authenticated.GET("/services/availability/summary", handlers.GetServiceAvailabilitySummary)
+
+			// Phase 5 — Asset Specs, SAM Usage, Disposal (read)
+			authenticated.GET("/assets/:id/spec", handlers.GetAssetSpecification)
+			authenticated.GET("/assets/disposals", handlers.GetAllDisposalRecords)
+			authenticated.GET("/assets/:id/disposal", handlers.GetDisposalRecord)
+			authenticated.GET("/licenses/reconciliation", handlers.GetLicenseReconciliation)
+			authenticated.GET("/licenses/:id/usage", handlers.GetSoftwareUsageLogs)
+
+			// Service Catalog (read — semua authenticated)
+			authenticated.GET("/service-catalog", handlers.GetServiceCatalog)
+
+			// Service Requests (read — semua authenticated)
+			authenticated.GET("/service-requests", handlers.GetAllServiceRequests)
+			authenticated.GET("/service-requests/:id", handlers.GetServiceRequestByID)
+
+			// Approval Workflows (read — semua authenticated)
+			authenticated.GET("/approvals", handlers.GetApprovalsByEntity)
+
+			// Change Management (read — semua authenticated)
+			authenticated.GET("/change-requests", handlers.GetAllChangeRequests)
+			authenticated.GET("/change-requests/:id", handlers.GetChangeRequestByID)
+
+			// Problem Management (read — semua authenticated)
+			authenticated.GET("/problems", handlers.GetAllProblems)
+			authenticated.GET("/problems/:id", handlers.GetProblemByID)
+			authenticated.GET("/tickets/:ticket_id/postmortem", handlers.GetPostmortem)
+
+			// Escalation Rules (read)
+			authenticated.GET("/escalation-rules", handlers.GetEscalationRules)
+
 		}
 
 		// ---------- MANAGERIAL ROLES ----------
@@ -200,6 +269,16 @@ func main() {
 			managerGroup.PUT("/cost-centers/:id", handlers.UpdateCostCenter)
 			managerGroup.DELETE("/cost-centers/:id", handlers.DeleteCostCenter)
 
+			// Excel Export (rate-limited — heavy operations)
+			managerGroup.GET("/export/assets.xlsx", middleware.RateLimitExport(), handlers.ExportAssetsExcel)
+			managerGroup.GET("/export/licenses.xlsx", middleware.RateLimitExport(), handlers.ExportLicensesExcel)
+			managerGroup.GET("/export/audit-logs.xlsx", middleware.RateLimitExport(), handlers.ExportAuditLogsExcel)
+
+			// PDF Export (rate-limited)
+			managerGroup.GET("/export/assets.pdf", middleware.RateLimitExport(), handlers.ExportAssetsPDF)
+			managerGroup.GET("/export/licenses.pdf", middleware.RateLimitExport(), handlers.ExportLicensesPDF)
+			managerGroup.GET("/export/compliance.pdf", middleware.RateLimitExport(), handlers.ExportCompliancePDF)
+
 		}
 
 		// ---------- SUPPORT / ADMIN ----------
@@ -212,6 +291,73 @@ func main() {
 			support.PUT("/tickets/:id", handlers.UpdateTicket)
 			support.POST("/tickets/:id/resolve", handlers.ResolveTicket)
 			support.POST("/tickets/:id/escalate", handlers.EscalateTicket)
+
+			// Service Requests (write — support & semua authenticated bisa buat)
+			support.POST("/service-requests", handlers.CreateServiceRequest)
+			support.PUT("/service-requests/:id", handlers.UpdateServiceRequest)
+			support.POST("/service-requests/:id/start", handlers.StartFulfillmentServiceRequest)
+			support.POST("/service-requests/:id/fulfill", handlers.FulfillServiceRequest)
+			support.POST("/service-requests/:id/cancel", handlers.CancelServiceRequest)
+
+			// Approval Workflows (write — support)
+			support.POST("/approvals", handlers.AddApprover)
+			support.POST("/approvals/decision", handlers.SubmitApprovalDecision)
+
+			// Change Management (write — support & admin)
+			support.POST("/change-requests", handlers.CreateChangeRequest)
+			support.PUT("/change-requests/:id", handlers.UpdateChangeRequest)
+			support.POST("/change-requests/:id/submit", handlers.SubmitChangeRequest)
+			support.POST("/change-requests/:id/schedule", handlers.ScheduleChangeRequest)
+			support.POST("/change-requests/:id/implement", handlers.ImplementChangeRequest)
+			support.POST("/change-requests/:id/complete", handlers.CompleteChangeRequest)
+			support.POST("/change-requests/:id/verify", handlers.VerifyChangeRequest)
+			support.POST("/change-requests/:id/approvers", handlers.AddCABApprover)
+			support.POST("/change-requests/:id/approvers/decision", handlers.SubmitCABDecision)
+			support.POST("/change-requests/:id/tasks", handlers.AddChangeTask)
+			support.PUT("/change-requests/:id/tasks/:task_id", handlers.UpdateChangeTask)
+			support.DELETE("/change-requests/:id/tasks/:task_id", handlers.DeleteChangeTask)
+
+			// Problem Management (write — support & admin)
+			support.POST("/problems", handlers.CreateProblem)
+			support.PUT("/problems/:id", handlers.UpdateProblem)
+			support.POST("/problems/:id/incidents", handlers.LinkIncidentToProblem)
+			support.DELETE("/problems/:id/incidents/:ticket_id", handlers.UnlinkIncidentFromProblem)
+
+			// Post-mortem (write — support & admin)
+			support.POST("/tickets/:ticket_id/postmortem", handlers.CreatePostmortem)
+			support.POST("/tickets/:ticket_id/postmortem/review", handlers.ReviewPostmortem)
+
+			// Phase 5 — Asset Specs & SAM Usage (write — support)
+			support.PUT("/assets/:id/spec", handlers.UpsertAssetSpecification)
+			support.POST("/licenses/:id/usage", handlers.LogSoftwareUsage)
+
+			// Phase 7 — QR Codes (write — support)
+			support.POST("/assets/:id/qr", handlers.GenerateAssetQRCode)
+			support.POST("/assets/:id/qr/print", handlers.LogQRPrint)
+
+			// Phase 7 — DR/BCP (write — support)
+			support.POST("/dr/plans", handlers.CreateDRPlan)
+			support.PUT("/dr/plans/:id", handlers.UpdateDRPlan)
+			support.POST("/dr/plans/:id/steps", handlers.AddDRPlanStep)
+			support.PUT("/dr/plans/:id/steps/:step_id", handlers.UpdateDRPlanStep)
+			support.DELETE("/dr/plans/:id/steps/:step_id", handlers.DeleteDRPlanStep)
+			support.POST("/dr/tests/:id/start", handlers.StartDRTest)
+			support.POST("/dr/tests/:id/complete", handlers.CompleteDRTest)
+			support.POST("/dr/tests/:id/results", handlers.RecordTestResult)
+
+			// Phase 6 — Compliance Evidence & Controls (write — support)
+			support.POST("/compliance/frameworks/:id/controls", handlers.CreateControl)
+			support.PUT("/compliance/controls/:id", handlers.UpdateControl)
+			support.POST("/compliance/controls/:id/evidence", handlers.AddEvidence)
+			support.PUT("/compliance/evidence/:id/review", handlers.ReviewEvidence)
+
+			// Phase 6 — Vendor Performance (write — support)
+			support.POST("/vendors/performance", handlers.CreateVendorPerformance)
+			support.PUT("/vendors/performance/:id", handlers.UpdateVendorPerformance)
+
+			// Phase 6 — Service Availability (write — support)
+			support.POST("/services/availability", handlers.RecordServiceAvailability)
+			support.PUT("/services/availability/:id", handlers.UpdateServiceAvailability)
 		}
 
 		// ---------- ADMIN / SUPER ADMIN ----------
@@ -290,6 +436,60 @@ func main() {
 			admin.GET("/audit/anomalies", handlers.GetSecurityAnomalies)
 			admin.GET("/audit/security/meta", handlers.GetSecurityAuditMeta)
 			admin.GET("/security/risk-insight", handlers.GetSecurityRiskInsight)
+
+			// Service Catalog (admin CRUD)
+			admin.POST("/service-catalog", handlers.CreateServiceCatalogItem)
+			admin.PUT("/service-catalog/:id", handlers.UpdateServiceCatalogItem)
+			admin.DELETE("/service-catalog/:id", handlers.DeleteServiceCatalogItem)
+			admin.DELETE("/service-requests/:id", handlers.DeleteServiceRequest)
+
+			// Change Management (admin actions)
+			admin.POST("/change-requests/:id/approve", handlers.ApproveChangeRequest)
+			admin.POST("/change-requests/:id/reject", handlers.RejectChangeRequest)
+			admin.POST("/change-requests/:id/close", handlers.CloseChangeRequest)
+			admin.DELETE("/change-requests/:id", handlers.DeleteChangeRequest)
+
+			// Problem Management (delete — admin only)
+			admin.DELETE("/problems/:id", handlers.DeleteProblem)
+
+			// Phase 5 — Asset Disposal Records (admin only)
+			admin.POST("/assets/:id/disposal", handlers.CreateDisposalRecord)
+			admin.PUT("/assets/:id/disposal", handlers.UpdateDisposalRecord)
+
+			// Phase 6 — Compliance Frameworks (admin CRUD)
+			admin.POST("/compliance/frameworks", handlers.CreateFramework)
+			admin.PUT("/compliance/frameworks/:id", handlers.UpdateFramework)
+			admin.DELETE("/compliance/frameworks/:id", handlers.DeleteFramework)
+			admin.DELETE("/compliance/controls/:id", handlers.DeleteControl)
+			admin.DELETE("/compliance/evidence/:id", handlers.DeleteEvidence)
+
+			// Phase 6 — Vendor & Service Availability (admin delete)
+			admin.DELETE("/vendors/performance/:id", handlers.DeleteVendorPerformance)
+			admin.DELETE("/services/availability/:id", handlers.DeleteServiceAvailability)
+
+			// Phase 7 — Webhooks (admin CRUD)
+			admin.POST("/webhooks", handlers.CreateWebhook)
+			admin.PUT("/webhooks/:id", handlers.UpdateWebhook)
+			admin.DELETE("/webhooks/:id", handlers.DeleteWebhook)
+			admin.POST("/webhooks/:id/test", handlers.TestWebhook)
+
+			// Phase 7 — LDAP/AD (admin only)
+			admin.GET("/ldap/configs", handlers.GetLDAPConfigs)
+			admin.POST("/ldap/configs", handlers.CreateLDAPConfig)
+			admin.PUT("/ldap/configs/:id", handlers.UpdateLDAPConfig)
+			admin.DELETE("/ldap/configs/:id", handlers.DeleteLDAPConfig)
+			admin.POST("/ldap/configs/:id/sync", handlers.TriggerLDAPSync)
+			admin.GET("/ldap/configs/:id/logs", handlers.GetLDAPSyncLogs)
+
+			// Phase 7 — DR/BCP (admin: activate, schedule test, delete plan)
+			admin.POST("/dr/plans/:id/activate", handlers.ActivateDRPlan)
+			admin.DELETE("/dr/plans/:id", handlers.DeleteDRPlan)
+			admin.POST("/dr/plans/:id/tests", handlers.ScheduleDRTest)
+
+			// Escalation Rules CRUD (admin only)
+			admin.POST("/escalation-rules", handlers.CreateEscalationRule)
+			admin.PUT("/escalation-rules/:id", handlers.UpdateEscalationRule)
+			admin.DELETE("/escalation-rules/:id", handlers.DeleteEscalationRule)
 
 			admin.POST("/internal/revoke", security.RequireRoles("super_admin"), handlers.RevokeTokenHandler)
 

@@ -1,11 +1,684 @@
 basePath: /api/v1
+definitions:
+  handlers.pagedResponse:
+    properties:
+      data: {}
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+    type: object
+  models.AssetSpecification:
+    properties:
+      asset_id:
+        type: integer
+      asset_name:
+        description: Transient
+        type: string
+      asset_tag:
+        type: string
+      bios_version:
+        description: Firmware & OS
+        type: string
+      color:
+        type: string
+      cpu_cores:
+        type: integer
+      cpu_model:
+        description: CPU
+        type: string
+      cpu_speed_ghz:
+        type: number
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      firmware_version:
+        type: string
+      form_factor:
+        description: Physical
+        type: string
+      id:
+        type: integer
+      ip_address:
+        type: string
+      last_scanned_at:
+        description: Audit
+        type: string
+      mac_address:
+        description: Network
+        type: string
+      os_license_key:
+        type: string
+      os_name:
+        type: string
+      os_version:
+        type: string
+      ram_gb:
+        description: Memory
+        type: number
+      ram_type:
+        type: string
+      resolution:
+        type: string
+      screen_size_inch:
+        description: Display
+        type: number
+      storage_gb:
+        description: Storage
+        type: number
+      storage_type:
+        type: string
+      updated_at:
+        type: string
+      weight_kg:
+        type: number
+    type: object
+  models.ChangeApproval:
+    properties:
+      approver_id:
+        type: integer
+      approver_name:
+        description: Transient
+        type: string
+      change_id:
+        type: integer
+      comment:
+        type: string
+      created_at:
+        type: string
+      decided_at:
+        type: string
+      decision:
+        description: approved | rejected | abstain | pending
+        type: string
+      id:
+        type: integer
+    type: object
+  models.ChangeRequestDetail:
+    properties:
+      approval_approved:
+        type: integer
+      approval_total:
+        type: integer
+      approvals:
+        items:
+          $ref: '#/definitions/models.ChangeApproval'
+        type: array
+      approved_at:
+        type: string
+      approved_by:
+        type: integer
+      approved_by_name:
+        type: string
+      cab_required:
+        type: boolean
+      change_window_end:
+        type: string
+      change_window_start:
+        type: string
+      cr_number:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      created_by_name:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      impact_assessment:
+        type: string
+      implemented_at:
+        type: string
+      related_asset_id:
+        type: integer
+      related_asset_name:
+        type: string
+      related_ticket_id:
+        type: integer
+      risk_level:
+        type: string
+      rollback_plan:
+        type: string
+      status:
+        type: string
+      submitted_at:
+        type: string
+      task_done:
+        type: integer
+      task_total:
+        type: integer
+      tasks:
+        items:
+          $ref: '#/definitions/models.ChangeTask'
+        type: array
+      title:
+        type: string
+      type:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.ChangeRequestInfo:
+    properties:
+      approval_approved:
+        type: integer
+      approval_total:
+        type: integer
+      approved_at:
+        type: string
+      approved_by:
+        type: integer
+      approved_by_name:
+        type: string
+      cab_required:
+        type: boolean
+      change_window_end:
+        type: string
+      change_window_start:
+        type: string
+      cr_number:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      created_by_name:
+        type: string
+      id:
+        type: integer
+      implemented_at:
+        type: string
+      related_asset_id:
+        type: integer
+      related_asset_name:
+        type: string
+      related_ticket_id:
+        type: integer
+      risk_level:
+        type: string
+      status:
+        type: string
+      submitted_at:
+        type: string
+      task_done:
+        type: integer
+      task_total:
+        type: integer
+      title:
+        type: string
+      type:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.ChangeTask:
+    properties:
+      assigned_to:
+        type: integer
+      assignee_name:
+        description: Transient
+        type: string
+      change_id:
+        type: integer
+      completed_at:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      seq_order:
+        type: integer
+      status:
+        description: pending | in_progress | done | skipped
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.DRPlan:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      created_by_name:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      last_tested_at:
+        type: string
+      name:
+        type: string
+      next_test_due:
+        type: string
+      owner_id:
+        type: integer
+      owner_name:
+        description: Transient
+        type: string
+      plan_type:
+        description: dr|bcp|contingency
+        type: string
+      rpo_hours:
+        type: number
+      rto_hours:
+        type: number
+      status:
+        description: draft|active|archived|under_review
+        type: string
+      step_count:
+        type: integer
+      steps:
+        items:
+          $ref: '#/definitions/models.DRPlanStep'
+        type: array
+      updated_at:
+        type: string
+    type: object
+  models.DRPlanStep:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      duration_minutes:
+        type: integer
+      id:
+        type: integer
+      is_critical:
+        type: boolean
+      plan_id:
+        type: integer
+      responsible:
+        type: integer
+      responsible_name:
+        description: Transient
+        type: string
+      step_order:
+        type: integer
+      title:
+        type: string
+    type: object
+  models.IncidentPostmortem:
+    properties:
+      action_items:
+        description: JSON array of action items
+        type: string
+      contributing_factors:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      created_by_name:
+        type: string
+      id:
+        type: integer
+      lessons_learned:
+        type: string
+      problem_id:
+        type: integer
+      reviewed_at:
+        type: string
+      reviewed_by:
+        type: integer
+      reviewed_by_name:
+        type: string
+      root_cause:
+        type: string
+      ticket_id:
+        type: integer
+      ticket_subject:
+        description: Transient join fields
+        type: string
+      timeline:
+        description: JSON array of timeline events
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.Problem:
+    properties:
+      assigned_to:
+        type: integer
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      deleted_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      known_error:
+        type: boolean
+      permanent_solution:
+        type: string
+      priority:
+        description: Low | Medium | High | Critical
+        type: string
+      related_asset_id:
+        type: integer
+      resolved_at:
+        type: string
+      root_cause:
+        type: string
+      status:
+        description: Open | Under Investigation | Known Error | Resolved | Closed
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+      updated_by:
+        type: integer
+      workaround:
+        type: string
+    type: object
+  models.ProblemDetail:
+    properties:
+      assigned_to:
+        type: integer
+      assignee_name:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      created_by_name:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      incident_count:
+        type: integer
+      known_error:
+        type: boolean
+      linked_incidents:
+        items:
+          $ref: '#/definitions/models.ProblemIncident'
+        type: array
+      permanent_solution:
+        type: string
+      postmortem:
+        $ref: '#/definitions/models.IncidentPostmortem'
+      priority:
+        type: string
+      related_asset_id:
+        type: integer
+      related_asset_name:
+        type: string
+      resolved_at:
+        type: string
+      root_cause:
+        type: string
+      status:
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+      workaround:
+        type: string
+    type: object
+  models.ProblemIncident:
+    properties:
+      id:
+        type: integer
+      linked_at:
+        type: string
+      linked_by:
+        type: integer
+      linked_by_name:
+        type: string
+      notes:
+        type: string
+      problem_id:
+        type: integer
+      ticket_id:
+        type: integer
+      ticket_priority:
+        type: string
+      ticket_status:
+        type: string
+      ticket_subject:
+        description: Transient join fields
+        type: string
+    type: object
+  models.ProblemInfo:
+    properties:
+      assigned_to:
+        type: integer
+      assignee_name:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      created_by_name:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      incident_count:
+        type: integer
+      known_error:
+        type: boolean
+      priority:
+        type: string
+      related_asset_id:
+        type: integer
+      related_asset_name:
+        type: string
+      resolved_at:
+        type: string
+      status:
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.ServiceCatalog:
+    properties:
+      approval_required:
+        type: boolean
+      category:
+        type: string
+      code:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      created_by_name:
+        type: string
+      deleted_at:
+        type: string
+      description:
+        type: string
+      fulfillment_sla_minutes:
+        type: integer
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      name:
+        type: string
+      sla_policy_id:
+        type: integer
+      sla_policy_name:
+        description: Transient
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.ServiceRequestInfo:
+    properties:
+      approval_required:
+        type: boolean
+      assigned_to:
+        type: integer
+      assigned_to_name:
+        type: string
+      created_at:
+        type: string
+      department_id:
+        type: integer
+      department_name:
+        type: string
+      fulfilled_at:
+        type: string
+      id:
+        type: integer
+      pending_approvals:
+        type: integer
+      priority:
+        type: string
+      related_asset_id:
+        type: integer
+      related_asset_name:
+        type: string
+      requested_by:
+        type: integer
+      requested_by_name:
+        type: string
+      service_catalog_code:
+        type: string
+      service_catalog_id:
+        type: integer
+      service_catalog_name:
+        type: string
+      sr_number:
+        type: string
+      status:
+        type: string
+      subject:
+        type: string
+      updated_at:
+        type: string
+    type: object
 info:
   contact: {}
-  description: API documentation for Asset & Compliance module (ISO/IEC 19770-10 Grade
-    A)
-  title: ITAM Backend API
-  version: "1.0"
+  description: Backend API implementing ISO/IEC 19770-10 Grade A++ RBAC model
+  title: IT Asset & Compliance API
+  version: "1.1"
 paths:
+  /approvals:
+    get:
+      parameters:
+      - description: service_request atau change_request
+        in: query
+        name: entity_type
+        required: true
+        type: string
+      - description: ID entitas
+        in: query
+        name: entity_id
+        required: true
+        type: integer
+      responses: {}
+      summary: List approval history untuk suatu entitas
+      tags:
+      - Approval
+    post:
+      responses: {}
+      summary: Tambah approver ke workflow (service_request / change_request)
+      tags:
+      - Approval
+  /approvals/decision:
+    post:
+      responses: {}
+      summary: Submit keputusan approval (approved/rejected/skipped)
+      tags:
+      - Approval
+  /assets/{id}/disposal:
+    get:
+      parameters:
+      - description: Asset ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses: {}
+      summary: Ambil record disposal suatu aset
+      tags:
+      - Asset Disposal
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Asset ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses: {}
+      summary: Buat disposal record untuk aset yang akan/sudah dibuang
+      tags:
+      - Asset Disposal
+    put:
+      parameters:
+      - description: Asset ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Update disposal record (sertifikat, environmental compliance, dll)
+      tags:
+      - Asset Disposal
+  /assets/{id}/spec:
+    get:
+      parameters:
+      - description: Asset ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.AssetSpecification'
+      summary: Ambil spesifikasi hardware suatu aset
+      tags:
+      - Asset Specifications
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Asset ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses: {}
+      summary: Buat atau update spesifikasi hardware aset (upsert)
+      tags:
+      - Asset Specifications
   /assets/compliance-export:
     get:
       produces:
@@ -32,4 +705,973 @@ paths:
       summary: Get all asset compliance records
       tags:
       - Compliance
+  /assets/disposals:
+    get:
+      parameters:
+      - description: Filter yang sudah environmental compliant
+        in: query
+        name: env_compliant
+        type: boolean
+      produces:
+      - application/json
+      responses: {}
+      summary: List semua disposal records
+      tags:
+      - Asset Disposal
+  /change-requests:
+    get:
+      parameters:
+      - description: Filter by status
+        in: query
+        name: status
+        type: string
+      - description: Filter by type (standard/normal/emergency)
+        in: query
+        name: type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.ChangeRequestInfo'
+            type: array
+      summary: List semua change requests
+      tags:
+      - Change Management
+    post:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses: {}
+      summary: Buat change request baru
+      tags:
+      - Change Management
+  /change-requests/{id}:
+    delete:
+      parameters:
+      - description: Change Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Soft-delete change request
+      tags:
+      - Change Management
+    get:
+      parameters:
+      - description: Change Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ChangeRequestDetail'
+      summary: Detail change request beserta approvals & tasks
+      tags:
+      - Change Management
+    put:
+      parameters:
+      - description: Change Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Update detail change request
+      tags:
+      - Change Management
+  /change-requests/{id}/approve:
+    post:
+      parameters:
+      - description: Change Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Approve CR → status approved + catat approver
+      tags:
+      - Change Management
+  /change-requests/{id}/approvers:
+    post:
+      parameters:
+      - description: Change Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Tambah anggota CAB untuk mereview CR
+      tags:
+      - Change Management
+  /change-requests/{id}/approvers/decision:
+    post:
+      parameters:
+      - description: Change Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Submit keputusan CAB (approved/rejected/abstain)
+      tags:
+      - Change Management
+  /change-requests/{id}/close:
+    post:
+      parameters:
+      - description: Change Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Tutup CR → status closed
+      tags:
+      - Change Management
+  /change-requests/{id}/complete:
+    post:
+      parameters:
+      - description: Change Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Tandai CR selesai diimplementasi → status implemented
+      tags:
+      - Change Management
+  /change-requests/{id}/implement:
+    post:
+      parameters:
+      - description: Change Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Tandai CR sedang diimplementasi → status implementing
+      tags:
+      - Change Management
+  /change-requests/{id}/reject:
+    post:
+      parameters:
+      - description: Change Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Tolak CR → status rejected
+      tags:
+      - Change Management
+  /change-requests/{id}/schedule:
+    post:
+      parameters:
+      - description: Change Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Set jadwal implementasi → status scheduled
+      tags:
+      - Change Management
+  /change-requests/{id}/submit:
+    post:
+      parameters:
+      - description: Change Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Submit CR dari draft → under_review / approved (standard)
+      tags:
+      - Change Management
+  /change-requests/{id}/tasks:
+    post:
+      parameters:
+      - description: Change Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Tambah sub-task implementasi ke CR
+      tags:
+      - Change Management
+  /change-requests/{id}/tasks/{task_id}:
+    delete:
+      parameters:
+      - description: Change Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Task ID
+        in: path
+        name: task_id
+        required: true
+        type: integer
+      responses: {}
+      summary: Hapus task dari CR
+      tags:
+      - Change Management
+    put:
+      parameters:
+      - description: Change Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Task ID
+        in: path
+        name: task_id
+        required: true
+        type: integer
+      responses: {}
+      summary: Update status / detail task
+      tags:
+      - Change Management
+  /change-requests/{id}/verify:
+    post:
+      parameters:
+      - description: Change Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Verifikasi hasil CR → status verified
+      tags:
+      - Change Management
+  /dr/plans:
+    get:
+      parameters:
+      - description: Filter by plan type (DR|BCP|COOP)
+        in: query
+        name: type
+        type: string
+      - description: Filter by status
+        in: query
+        name: status
+        type: string
+      - description: Search by name
+        in: query
+        name: q
+        type: string
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.pagedResponse'
+      security:
+      - BearerAuth: []
+      summary: List semua DR/BCP plans
+      tags:
+      - DR/BCP
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: DR Plan
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.DRPlan'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.DRPlan'
+      security:
+      - BearerAuth: []
+      summary: Buat DR/BCP plan baru
+      tags:
+      - DR/BCP
+  /dr/plans/{id}:
+    get:
+      parameters:
+      - description: Plan ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.DRPlan'
+      security:
+      - BearerAuth: []
+      summary: Detail DR/BCP plan beserta langkah-langkah
+      tags:
+      - DR/BCP
+  /dr/tests:
+    get:
+      parameters:
+      - description: Filter by plan ID
+        in: query
+        name: plan_id
+        type: integer
+      - description: Filter by status
+        in: query
+        name: status
+        type: string
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.pagedResponse'
+      security:
+      - BearerAuth: []
+      summary: List DR test records
+      tags:
+      - DR/BCP
+  /escalation-rules:
+    get:
+      produces:
+      - application/json
+      responses: {}
+      summary: List semua aturan eskalasi
+      tags:
+      - Escalation
+    post:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses: {}
+      summary: Buat aturan eskalasi baru
+      tags:
+      - Escalation
+  /escalation-rules/{id}:
+    delete:
+      parameters:
+      - description: Rule ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Hapus aturan eskalasi
+      tags:
+      - Escalation
+    put:
+      parameters:
+      - description: Rule ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Update aturan eskalasi
+      tags:
+      - Escalation
+  /export/assets.xlsx:
+    get:
+      produces:
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+      security:
+      - BearerAuth: []
+      summary: Export daftar asset ke Excel
+      tags:
+      - Export
+  /export/audit-logs.xlsx:
+    get:
+      produces:
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+      security:
+      - BearerAuth: []
+      summary: Export audit log ke Excel (maks 5000 baris terbaru)
+      tags:
+      - Export
+  /export/licenses.xlsx:
+    get:
+      produces:
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+      security:
+      - BearerAuth: []
+      summary: Export daftar lisensi ke Excel
+      tags:
+      - Export
+  /governance/score-summary:
+    get:
+      description: Returns average governance score and compliance rate per department
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get governance score summary
+      tags:
+      - Governance
+  /governance/trend:
+    get:
+      description: Returns monthly average governance score & compliance rate
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get governance trend (last 12 months)
+      tags:
+      - Governance
+  /licenses/{id}/usage:
+    get:
+      parameters:
+      - description: License ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses: {}
+      summary: List usage logs untuk suatu lisensi
+      tags:
+      - Software Usage
+    post:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses: {}
+      summary: Catat sesi penggunaan lisensi (manual / import)
+      tags:
+      - Software Usage
+  /licenses/reconciliation:
+    get:
+      parameters:
+      - description: 'Filter: compliant|over_licensed|under_utilized'
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses: {}
+      summary: Laporan rekonsiliasi lisensi (entitlement vs aktual)
+      tags:
+      - Software Usage
+  /notifications:
+    get:
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Page size
+        in: query
+        name: limit
+        type: integer
+      - description: Filter hanya yang belum dibaca
+        in: query
+        name: unread
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.pagedResponse'
+      security:
+      - BearerAuth: []
+      summary: List notifikasi milik user yang login
+      tags:
+      - Notifications
+  /notifications/{id}:
+    delete:
+      parameters:
+      - description: Notification ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Hapus notifikasi milik user sendiri
+      tags:
+      - Notifications
+  /notifications/{id}/read:
+    put:
+      parameters:
+      - description: Notification ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Tandai satu notifikasi sebagai sudah dibaca
+      tags:
+      - Notifications
+  /notifications/read-all:
+    put:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Tandai semua notifikasi sebagai sudah dibaca
+      tags:
+      - Notifications
+  /notifications/unread-count:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: integer
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Jumlah notifikasi belum dibaca
+      tags:
+      - Notifications
+  /problems:
+    get:
+      parameters:
+      - description: Filter by status
+        in: query
+        name: status
+        type: string
+      - description: Filter known errors only
+        in: query
+        name: known_error
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.ProblemInfo'
+            type: array
+      summary: List semua problems
+      tags:
+      - Problem Management
+    post:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Problem'
+      summary: Buat problem baru
+      tags:
+      - Problem Management
+  /problems/{id}:
+    delete:
+      parameters:
+      - description: Problem ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Soft-delete problem
+      tags:
+      - Problem Management
+    get:
+      parameters:
+      - description: Problem ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ProblemDetail'
+      summary: Detail problem beserta linked incidents
+      tags:
+      - Problem Management
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Problem ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses: {}
+      summary: Update problem (status, RCA, workaround, dll)
+      tags:
+      - Problem Management
+  /problems/{id}/incidents:
+    post:
+      parameters:
+      - description: Problem ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Hubungkan ticket (incident) ke problem
+      tags:
+      - Problem Management
+  /problems/{id}/incidents/{ticket_id}:
+    delete:
+      parameters:
+      - description: Problem ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Ticket ID
+        in: path
+        name: ticket_id
+        required: true
+        type: integer
+      responses: {}
+      summary: Putus relasi ticket dari problem
+      tags:
+      - Problem Management
+  /service-catalog:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.ServiceCatalog'
+            type: array
+      summary: List service catalog yang aktif
+      tags:
+      - Service Catalog
+    post:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses: {}
+      summary: Tambah item baru ke service catalog
+      tags:
+      - Service Catalog
+  /service-catalog/{id}:
+    delete:
+      parameters:
+      - description: Catalog Item ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Soft-delete item service catalog
+      tags:
+      - Service Catalog
+    put:
+      parameters:
+      - description: Catalog Item ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Update item service catalog
+      tags:
+      - Service Catalog
+  /service-requests:
+    get:
+      parameters:
+      - description: Filter by status
+        in: query
+        name: status
+        type: string
+      - description: Hanya request milik sendiri
+        in: query
+        name: my
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.ServiceRequestInfo'
+            type: array
+      summary: List semua service requests
+      tags:
+      - Service Request
+    post:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses: {}
+      summary: Buat service request baru
+      tags:
+      - Service Request
+  /service-requests/{id}:
+    delete:
+      parameters:
+      - description: Service Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Soft-delete service request
+      tags:
+      - Service Request
+    get:
+      parameters:
+      - description: Service Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Detail service request beserta approval history
+      tags:
+      - Service Request
+    put:
+      parameters:
+      - description: Service Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Update service request (assignee, notes, dll)
+      tags:
+      - Service Request
+  /service-requests/{id}/cancel:
+    post:
+      parameters:
+      - description: Service Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Batalkan service request
+      tags:
+      - Service Request
+  /service-requests/{id}/fulfill:
+    post:
+      parameters:
+      - description: Service Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Tandai service request selesai dipenuhi
+      tags:
+      - Service Request
+  /service-requests/{id}/start:
+    post:
+      parameters:
+      - description: Service Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses: {}
+      summary: Mulai proses pemenuhan SR → in_fulfillment
+      tags:
+      - Service Request
+  /services/availability:
+    get:
+      parameters:
+      - description: Filter by service code
+        in: query
+        name: service_code
+        type: string
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.pagedResponse'
+      security:
+      - BearerAuth: []
+      summary: List data availability layanan
+      tags:
+      - Vendor & Service
+  /tickets/{ticket_id}/postmortem:
+    get:
+      parameters:
+      - description: Ticket ID
+        in: path
+        name: ticket_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses: {}
+      summary: Ambil post-mortem berdasarkan ticket
+      tags:
+      - Post-Mortem
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Ticket ID
+        in: path
+        name: ticket_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses: {}
+      summary: Buat post-mortem untuk incident (ticket)
+      tags:
+      - Post-Mortem
+  /tickets/{ticket_id}/postmortem/review:
+    post:
+      parameters:
+      - description: Ticket ID
+        in: path
+        name: ticket_id
+        required: true
+        type: integer
+      responses: {}
+      summary: Tandai post-mortem sudah di-review
+      tags:
+      - Post-Mortem
+  /vendors/performance:
+    get:
+      parameters:
+      - description: Filter by vendor name
+        in: query
+        name: vendor
+        type: string
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.pagedResponse'
+      security:
+      - BearerAuth: []
+      summary: List performa vendor
+      tags:
+      - Vendor & Service
 swagger: "2.0"

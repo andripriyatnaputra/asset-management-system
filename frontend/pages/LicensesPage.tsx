@@ -18,8 +18,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
-  Plus, Search, Edit3, Trash2, KeyRound, ChevronLeft, ChevronRight
+  Plus, Search, Edit3, Trash2, KeyRound, ChevronLeft, ChevronRight, FileDown, FileText
 } from "lucide-react"
+import { downloadFile } from "@/lib/utils"
 import LicenseFormModal from "@/components/LicenseFormModal"
 
 type License = {
@@ -138,6 +139,10 @@ export default function LicensesPage() {
     }
   }
 
+  const today = new Date().toISOString().slice(0, 10)
+  const handleExportExcel = () => downloadFile('/export/licenses.xlsx', `licenses_${today}.xlsx`)
+  const handleExportPDF   = () => downloadFile('/export/licenses.pdf',  `licenses_${today}.pdf`)
+
   const getStatusBadge = (status?: string | null) => {
     const s = (status || "").toLowerCase()
     if (s === "compliant") return <Badge className="bg-green-500/10 text-green-700 border-green-400">Compliant</Badge>
@@ -162,6 +167,12 @@ export default function LicensesPage() {
               onChange={(e) => setSearch(e.target.value)}
               className="w-[240px]"
             />
+            <Button variant="outline" onClick={handleExportExcel} className="gap-1">
+              <FileDown size={16} /> Export Excel
+            </Button>
+            <Button variant="outline" onClick={handleExportPDF} className="gap-1">
+              <FileText size={16} /> Export PDF
+            </Button>
             <Button
               onClick={() => {
                 setEditItem(null)

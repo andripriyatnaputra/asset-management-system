@@ -21,6 +21,10 @@ import {
   Activity,
   MapPin,
   Building2,
+  GitBranch,
+  Headphones,
+  ShieldCheck,
+  Plug,
 } from "lucide-react"
 
 export type RoleType =
@@ -48,6 +52,7 @@ export const getNavItems = (role: RoleType): NavItem[] => {
   const base: NavItem[] = [
     { path: "/", label: "Dashboard", icon: Home },
     { path: "/tickets", label: "Tickets", icon: HelpCircle },
+    { path: "/service-requests", label: "Service Requests", icon: Headphones },
   ]
 
   const employeeOnly: NavItem[] = [
@@ -69,6 +74,11 @@ export const getNavItems = (role: RoleType): NavItem[] => {
     { path: "/alerts", label: "Alerts Center", icon: Bell },
     { path: "/alerts/history", label: "Alerts History", icon: AlertTriangle },
     { path: "/correlation", label: "Correlation Dashboard", icon: Activity },
+    { path: "/problems", label: "Problem Management", icon: Bug },
+    { path: "/change-requests", label: "Change Management", icon: GitBranch },
+    { path: "/itsm-compliance", label: "Compliance & Audit", icon: ShieldCheck },
+    { path: "/dr-bcp", label: "DR / BCP", icon: Shield },
+    { path: "/integrations", label: "Integrations", icon: Plug },
   ]
 
   const finance: NavItem[] = [

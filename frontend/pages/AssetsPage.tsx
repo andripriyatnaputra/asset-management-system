@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import apiClient from '@/services/api'
+import { downloadFile } from '@/lib/utils'
 import {
   Plus, Search, Info, Edit3, Trash2,
   FileText, ClipboardCheck, ChevronLeft, ChevronRight, Layers, FileDown,
@@ -196,6 +197,10 @@ export default function AssetsPage() {
     }
   }
 
+  const today = new Date().toISOString().slice(0, 10)
+  const handleExportExcel = () => downloadFile('/export/assets.xlsx', `assets_${today}.xlsx`)
+  const handleExportPDF   = () => downloadFile('/export/assets.pdf',  `assets_${today}.pdf`)
+
   const handleDelete = async () => {
     if (!deleteItem) return
     try {
@@ -239,6 +244,12 @@ export default function AssetsPage() {
             </Button>
             <Button variant="outline" onClick={handleExportCSV}>
               <FileDown size={16} className="mr-1" /> Export CSV
+            </Button>
+            <Button variant="outline" onClick={handleExportExcel}>
+              <FileDown size={16} className="mr-1" /> Export Excel
+            </Button>
+            <Button variant="outline" onClick={handleExportPDF}>
+              <FileText size={16} className="mr-1" /> Export PDF
             </Button>
           </div>
         </CardHeader>

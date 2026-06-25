@@ -328,7 +328,9 @@ CREATE TABLE public.asset_assignments (
     returned_at timestamp with time zone,
     notes text,
     assigned_by_employee_id bigint,
-    returned_by_employee_id bigint
+    returned_by_employee_id bigint,
+    status character varying(20) DEFAULT 'active' NOT NULL,
+    CONSTRAINT asset_assignments_status_check CHECK (((status)::text = ANY (ARRAY[('active'::character varying)::text, ('returned'::character varying)::text, ('lost'::character varying)::text, ('damaged'::character varying)::text])))
 );
 
 
@@ -635,7 +637,9 @@ CREATE TABLE public.audited_assets (
     asset_id bigint NOT NULL,
     status character varying(50) DEFAULT 'Missing'::character varying NOT NULL,
     found_at timestamp with time zone,
-    notes text
+    notes text,
+    verified_by bigint,
+    verified_at timestamp with time zone
 );
 
 
@@ -1589,7 +1593,21 @@ CREATE TABLE public.problems (
     title text,
     description text,
     status text DEFAULT 'Open'::text,
-    created_at timestamp with time zone DEFAULT now()
+    priority character varying(20) DEFAULT 'Medium'::character varying NOT NULL,
+    assigned_to bigint,
+    created_by bigint,
+    updated_by bigint,
+    root_cause text,
+    workaround text,
+    known_error boolean DEFAULT false NOT NULL,
+    permanent_solution text,
+    related_asset_id bigint,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    resolved_at timestamp with time zone,
+    deleted_at timestamp with time zone,
+    CONSTRAINT problems_status_check CHECK ((status = ANY (ARRAY['Open'::text, 'Under Investigation'::text, 'Known Error'::text, 'Resolved'::text, 'Closed'::text]))),
+    CONSTRAINT problems_priority_check CHECK (((priority)::text = ANY (ARRAY[('Low'::character varying)::text, ('Medium'::character varying)::text, ('High'::character varying)::text, ('Critical'::character varying)::text])))
 );
 
 
@@ -1620,7 +1638,11 @@ CREATE TABLE public.role_delegations (
     role_override character varying(50) NOT NULL,
     start_date date NOT NULL,
     end_date date NOT NULL,
-    created_at timestamp with time zone DEFAULT now()
+    created_at timestamp with time zone DEFAULT now(),
+    is_active boolean DEFAULT true NOT NULL,
+    reason text,
+    revoked_at timestamp with time zone,
+    revoked_by bigint
 );
 
 
@@ -3608,6 +3630,724 @@ ALTER TABLE public.budgets ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY department_budget_access ON public.budgets FOR SELECT USING (((current_setting('app.current_department'::text, true) IS NOT NULL) AND (department_id = (current_setting('app.current_department'::text, true))::bigint)));
 
+
+--
+-- Phase 4 Migrations: Service Catalog & Service Request Management (ISO 20000-1 Cl. 8.6)
+--
+
+CREATE SEQUENCE IF NOT EXISTS public.sr_number_seq START WITH 1;
+
+CREATE TABLE IF NOT EXISTS public.service_catalog (
+    id                     BIGSERIAL PRIMARY KEY,
+    code                   VARCHAR(50) NOT NULL UNIQUE,
+    name                   VARCHAR(255) NOT NULL,
+    category               VARCHAR(100),
+    description            TEXT,
+    sla_policy_id          BIGINT REFERENCES public.sla_policies(id) ON DELETE SET NULL,
+    approval_required      BOOLEAN NOT NULL DEFAULT false,
+    fulfillment_sla_minutes INT,
+    is_active              BOOLEAN NOT NULL DEFAULT true,
+    created_by             BIGINT REFERENCES public.employees(id),
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    deleted_at             TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_sc_category   ON public.service_catalog (category);
+CREATE INDEX IF NOT EXISTS idx_sc_is_active  ON public.service_catalog (is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_sc_deleted_at ON public.service_catalog (deleted_at);
+
+CREATE TABLE IF NOT EXISTS public.service_requests (
+    id                  BIGSERIAL PRIMARY KEY,
+    sr_number           VARCHAR(50) NOT NULL UNIQUE,
+    service_catalog_id  BIGINT NOT NULL REFERENCES public.service_catalog(id),
+    subject             VARCHAR(255) NOT NULL,
+    description         TEXT,
+    status              VARCHAR(30) NOT NULL DEFAULT 'submitted'
+        CONSTRAINT sr_status_check CHECK (status IN (
+            'submitted','pending_approval','approved',
+            'in_fulfillment','completed','cancelled','rejected'
+        )),
+    priority            VARCHAR(20) NOT NULL DEFAULT 'Medium'
+        CONSTRAINT sr_priority_check CHECK (priority IN ('Low','Medium','High','Critical')),
+    requested_by        BIGINT NOT NULL REFERENCES public.employees(id),
+    assigned_to         BIGINT REFERENCES public.employees(id),
+    department_id       BIGINT REFERENCES public.departments(id),
+    related_asset_id    BIGINT REFERENCES public.assets(id) ON DELETE SET NULL,
+    notes               TEXT,
+    fulfilled_at        TIMESTAMPTZ,
+    closed_at           TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    deleted_at          TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_sr_status        ON public.service_requests (status);
+CREATE INDEX IF NOT EXISTS idx_sr_requested_by  ON public.service_requests (requested_by);
+CREATE INDEX IF NOT EXISTS idx_sr_assigned_to   ON public.service_requests (assigned_to);
+CREATE INDEX IF NOT EXISTS idx_sr_catalog_id    ON public.service_requests (service_catalog_id);
+CREATE INDEX IF NOT EXISTS idx_sr_department_id ON public.service_requests (department_id);
+CREATE INDEX IF NOT EXISTS idx_sr_deleted_at    ON public.service_requests (deleted_at);
+
+CREATE TABLE IF NOT EXISTS public.approval_workflows (
+    id          BIGSERIAL PRIMARY KEY,
+    entity_type VARCHAR(50) NOT NULL
+        CONSTRAINT aw_entity_check CHECK (entity_type IN ('service_request','change_request')),
+    entity_id   BIGINT NOT NULL,
+    level       INT NOT NULL DEFAULT 1,
+    approver_id BIGINT NOT NULL REFERENCES public.employees(id),
+    status      VARCHAR(20) NOT NULL DEFAULT 'pending'
+        CONSTRAINT aw_status_check CHECK (status IN ('pending','approved','rejected','skipped')),
+    comment     TEXT,
+    decided_at  TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_approval_workflow UNIQUE (entity_type, entity_id, level, approver_id)
+);
+CREATE INDEX IF NOT EXISTS idx_aw_entity   ON public.approval_workflows (entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_aw_approver ON public.approval_workflows (approver_id);
+CREATE INDEX IF NOT EXISTS idx_aw_status   ON public.approval_workflows (status);
+CREATE INDEX IF NOT EXISTS idx_aw_level    ON public.approval_workflows (entity_type, entity_id, level);
+
+ALTER TABLE public.tickets
+    ADD COLUMN IF NOT EXISTS ticket_type VARCHAR(20) NOT NULL DEFAULT 'incident'
+        CONSTRAINT tickets_type_check CHECK (ticket_type IN ('incident','request','problem','change'));
+CREATE INDEX IF NOT EXISTS idx_tickets_ticket_type ON public.tickets (ticket_type);
+
+--
+-- Phase 3 Migrations: Change Management (ISO 20000-1 Cl. 9.2 & ITIL)
+--
+
+CREATE SEQUENCE IF NOT EXISTS public.cr_number_seq START WITH 1;
+
+CREATE TABLE IF NOT EXISTS public.change_requests (
+    id                    BIGSERIAL PRIMARY KEY,
+    cr_number             VARCHAR(50) NOT NULL UNIQUE,
+    title                 VARCHAR(255) NOT NULL,
+    description           TEXT,
+    type                  VARCHAR(20) NOT NULL DEFAULT 'normal'
+        CONSTRAINT cr_type_check CHECK (type IN ('standard','normal','emergency')),
+    status                VARCHAR(30) NOT NULL DEFAULT 'draft'
+        CONSTRAINT cr_status_check CHECK (status IN (
+            'draft','submitted','under_review','approved',
+            'scheduled','implementing','implemented','verified','closed','rejected'
+        )),
+    risk_level            VARCHAR(20) NOT NULL DEFAULT 'medium'
+        CONSTRAINT cr_risk_check CHECK (risk_level IN ('low','medium','high','critical')),
+    impact_assessment     TEXT,
+    rollback_plan         TEXT,
+    change_window_start   TIMESTAMPTZ,
+    change_window_end     TIMESTAMPTZ,
+    cab_required          BOOLEAN NOT NULL DEFAULT false,
+    related_asset_id      BIGINT REFERENCES public.assets(id) ON DELETE SET NULL,
+    related_ticket_id     BIGINT REFERENCES public.tickets(id) ON DELETE SET NULL,
+    created_by            BIGINT REFERENCES public.employees(id),
+    approved_by           BIGINT REFERENCES public.employees(id),
+    implemented_by        BIGINT REFERENCES public.employees(id),
+    submitted_at          TIMESTAMPTZ,
+    approved_at           TIMESTAMPTZ,
+    implemented_at        TIMESTAMPTZ,
+    verified_at           TIMESTAMPTZ,
+    closed_at             TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    deleted_at            TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_cr_status       ON public.change_requests (status);
+CREATE INDEX IF NOT EXISTS idx_cr_type         ON public.change_requests (type);
+CREATE INDEX IF NOT EXISTS idx_cr_risk_level   ON public.change_requests (risk_level);
+CREATE INDEX IF NOT EXISTS idx_cr_created_by   ON public.change_requests (created_by);
+CREATE INDEX IF NOT EXISTS idx_cr_window_start ON public.change_requests (change_window_start);
+CREATE INDEX IF NOT EXISTS idx_cr_deleted_at   ON public.change_requests (deleted_at);
+
+CREATE TABLE IF NOT EXISTS public.change_approvals (
+    id          BIGSERIAL PRIMARY KEY,
+    change_id   BIGINT NOT NULL REFERENCES public.change_requests(id) ON DELETE CASCADE,
+    approver_id BIGINT NOT NULL REFERENCES public.employees(id),
+    decision    VARCHAR(20) NOT NULL
+        CONSTRAINT ca_decision_check CHECK (decision IN ('approved','rejected','abstain','pending')),
+    comment     TEXT,
+    decided_at  TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_change_approval UNIQUE (change_id, approver_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ca_change_id   ON public.change_approvals (change_id);
+CREATE INDEX IF NOT EXISTS idx_ca_approver_id ON public.change_approvals (approver_id);
+CREATE INDEX IF NOT EXISTS idx_ca_decision    ON public.change_approvals (decision);
+
+CREATE TABLE IF NOT EXISTS public.change_tasks (
+    id           BIGSERIAL PRIMARY KEY,
+    change_id    BIGINT NOT NULL REFERENCES public.change_requests(id) ON DELETE CASCADE,
+    title        VARCHAR(255) NOT NULL,
+    description  TEXT,
+    status       VARCHAR(20) NOT NULL DEFAULT 'pending'
+        CONSTRAINT ct_status_check CHECK (status IN ('pending','in_progress','done','skipped')),
+    assigned_to  BIGINT REFERENCES public.employees(id),
+    seq_order    INT NOT NULL DEFAULT 1,
+    completed_at TIMESTAMPTZ,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ct_change_id   ON public.change_tasks (change_id);
+CREATE INDEX IF NOT EXISTS idx_ct_assigned_to ON public.change_tasks (assigned_to);
+CREATE INDEX IF NOT EXISTS idx_ct_status      ON public.change_tasks (status);
+
+ALTER TABLE public.tickets
+    ADD COLUMN IF NOT EXISTS change_request_id BIGINT
+        REFERENCES public.change_requests(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_tickets_change_request_id ON public.tickets (change_request_id);
+
+--
+-- Phase 2 Migrations: Problem Management, Post-Mortem, Escalation Rules
+--
+
+CREATE TABLE IF NOT EXISTS public.problem_incidents (
+    id          BIGSERIAL PRIMARY KEY,
+    problem_id  BIGINT NOT NULL REFERENCES public.problems(id) ON DELETE CASCADE,
+    ticket_id   BIGINT NOT NULL REFERENCES public.tickets(id)  ON DELETE CASCADE,
+    linked_by   BIGINT REFERENCES public.employees(id),
+    linked_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    notes       TEXT,
+    CONSTRAINT uq_problem_incident UNIQUE (problem_id, ticket_id)
+);
+CREATE INDEX IF NOT EXISTS idx_pi_problem_id ON public.problem_incidents (problem_id);
+CREATE INDEX IF NOT EXISTS idx_pi_ticket_id  ON public.problem_incidents (ticket_id);
+
+CREATE TABLE IF NOT EXISTS public.incident_postmortems (
+    id                   BIGSERIAL PRIMARY KEY,
+    ticket_id            BIGINT NOT NULL REFERENCES public.tickets(id) ON DELETE CASCADE,
+    problem_id           BIGINT REFERENCES public.problems(id) ON DELETE SET NULL,
+    timeline             JSONB  NOT NULL DEFAULT '[]',
+    root_cause           TEXT,
+    contributing_factors TEXT,
+    lessons_learned      TEXT,
+    action_items         JSONB  NOT NULL DEFAULT '[]',
+    reviewed_by          BIGINT REFERENCES public.employees(id),
+    reviewed_at          TIMESTAMPTZ,
+    created_by           BIGINT REFERENCES public.employees(id),
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_postmortem_ticket UNIQUE (ticket_id)
+);
+CREATE INDEX IF NOT EXISTS idx_postmortem_ticket_id   ON public.incident_postmortems (ticket_id);
+CREATE INDEX IF NOT EXISTS idx_postmortem_problem_id  ON public.incident_postmortems (problem_id);
+CREATE INDEX IF NOT EXISTS idx_postmortem_reviewed_by ON public.incident_postmortems (reviewed_by);
+
+CREATE TABLE IF NOT EXISTS public.escalation_rules (
+    id                   BIGSERIAL PRIMARY KEY,
+    name                 VARCHAR(255) NOT NULL,
+    category_code        TEXT REFERENCES public.ticket_categories(code) ON DELETE SET NULL,
+    service_code         TEXT REFERENCES public.services(code)          ON DELETE SET NULL,
+    priority             VARCHAR(20)  NOT NULL
+        CONSTRAINT escalation_rules_priority_check CHECK (priority IN ('Low','Medium','High','Critical')),
+    trigger_after_minutes INT NOT NULL,
+    action               VARCHAR(50)  NOT NULL DEFAULT 'reassign'
+        CONSTRAINT escalation_rules_action_check CHECK (action IN ('reassign','notify','raise_priority','raise_escalation_level')),
+    escalate_to_role     VARCHAR(50),
+    escalate_to_employee BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    notify_emails        TEXT,
+    is_active            BOOLEAN      NOT NULL DEFAULT true,
+    created_by           BIGINT REFERENCES public.employees(id),
+    created_at           TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_escr_priority  ON public.escalation_rules (priority);
+CREATE INDEX IF NOT EXISTS idx_escr_is_active ON public.escalation_rules (is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_escr_category  ON public.escalation_rules (category_code);
+
+--
+-- Phase 1 Migrations: Schema fixes for ITAM/ITSM compliance
+--
+
+-- FK: audited_assets.verified_by → employees
+ALTER TABLE ONLY public.audited_assets
+    ADD CONSTRAINT audited_assets_verified_by_fkey FOREIGN KEY (verified_by) REFERENCES public.employees(id);
+
+-- FK: problems.assigned_to, created_by, updated_by, related_asset_id → employees/assets
+ALTER TABLE ONLY public.problems
+    ADD CONSTRAINT problems_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.employees(id);
+ALTER TABLE ONLY public.problems
+    ADD CONSTRAINT problems_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.employees(id);
+ALTER TABLE ONLY public.problems
+    ADD CONSTRAINT problems_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.employees(id);
+ALTER TABLE ONLY public.problems
+    ADD CONSTRAINT problems_related_asset_id_fkey FOREIGN KEY (related_asset_id) REFERENCES public.assets(id);
+
+-- FK: role_delegations.revoked_by → employees
+ALTER TABLE ONLY public.role_delegations
+    ADD CONSTRAINT role_delegations_revoked_by_fkey FOREIGN KEY (revoked_by) REFERENCES public.employees(id);
+
+-- Indexes: problems
+CREATE INDEX idx_problems_status      ON public.problems USING btree (status);
+CREATE INDEX idx_problems_assigned_to ON public.problems USING btree (assigned_to);
+CREATE INDEX idx_problems_known_error ON public.problems USING btree (known_error) WHERE known_error = true;
+
+-- Index: role_delegations aktif
+CREATE INDEX idx_role_delegations_is_active ON public.role_delegations USING btree (is_active) WHERE is_active = true;
+
+-- ============================================================
+-- FASE 7: Integrations — Webhooks, QR/Barcode, LDAP Sync, DR/BCP
+-- ============================================================
+
+-- 7.1 Webhook Subscriptions
+CREATE TABLE IF NOT EXISTS public.webhook_subscriptions (
+    id         BIGSERIAL PRIMARY KEY,
+    name       VARCHAR(255) NOT NULL,
+    url        TEXT NOT NULL,
+    events     TEXT[] NOT NULL DEFAULT '{}',
+    secret     VARCHAR(255),
+    is_active  BOOLEAN NOT NULL DEFAULT true,
+    created_by BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ws_is_active ON public.webhook_subscriptions (is_active);
+
+-- 7.2 Webhook Delivery Logs
+CREATE TABLE IF NOT EXISTS public.webhook_delivery_logs (
+    id              BIGSERIAL PRIMARY KEY,
+    subscription_id BIGINT NOT NULL REFERENCES public.webhook_subscriptions(id) ON DELETE CASCADE,
+    event_type      VARCHAR(100) NOT NULL,
+    payload         TEXT NOT NULL DEFAULT '{}',
+    status          VARCHAR(20) NOT NULL DEFAULT 'pending'
+        CONSTRAINT wdl_status_check CHECK (status IN ('pending','delivered','failed')),
+    response_code   INT,
+    response_body   TEXT,
+    attempt_count   INT NOT NULL DEFAULT 0,
+    last_attempt_at TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_wdl_subscription_id ON public.webhook_delivery_logs (subscription_id);
+CREATE INDEX IF NOT EXISTS idx_wdl_status          ON public.webhook_delivery_logs (status);
+CREATE INDEX IF NOT EXISTS idx_wdl_created_at      ON public.webhook_delivery_logs (created_at);
+
+-- 7.3 Asset QR Codes
+CREATE TABLE IF NOT EXISTS public.asset_qr_codes (
+    id         BIGSERIAL PRIMARY KEY,
+    asset_id   BIGINT NOT NULL REFERENCES public.assets(id) ON DELETE CASCADE,
+    qr_data    TEXT NOT NULL,
+    format     VARCHAR(20) NOT NULL DEFAULT 'qr'
+        CONSTRAINT aqc_format_check CHECK (format IN ('qr','barcode','datamatrix')),
+    label_data TEXT,
+    printed_at TIMESTAMPTZ,
+    printed_by BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    created_by BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_aqc_asset_id ON public.asset_qr_codes (asset_id);
+
+-- 7.4 LDAP Sync Config
+CREATE TABLE IF NOT EXISTS public.ldap_sync_configs (
+    id            BIGSERIAL PRIMARY KEY,
+    name          VARCHAR(100) NOT NULL DEFAULT 'default',
+    host          VARCHAR(255) NOT NULL,
+    port          INT NOT NULL DEFAULT 389,
+    use_tls       BOOLEAN NOT NULL DEFAULT false,
+    base_dn       TEXT NOT NULL,
+    bind_dn       TEXT NOT NULL,
+    bind_password TEXT,
+    user_filter   TEXT NOT NULL DEFAULT '(objectClass=person)',
+    field_map     TEXT NOT NULL DEFAULT '{"sAMAccountName":"username","cn":"name","mail":"email"}',
+    is_active     BOOLEAN NOT NULL DEFAULT false,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 7.5 LDAP Sync Logs
+CREATE TABLE IF NOT EXISTS public.ldap_sync_logs (
+    id            BIGSERIAL PRIMARY KEY,
+    config_id     BIGINT NOT NULL REFERENCES public.ldap_sync_configs(id) ON DELETE CASCADE,
+    status        VARCHAR(20) NOT NULL
+        CONSTRAINT lsl_status_check CHECK (status IN ('running','success','partial','failed')),
+    users_found   INT NOT NULL DEFAULT 0,
+    users_synced  INT NOT NULL DEFAULT 0,
+    users_skipped INT NOT NULL DEFAULT 0,
+    errors        TEXT NOT NULL DEFAULT '[]',
+    started_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    finished_at   TIMESTAMPTZ,
+    triggered_by  BIGINT REFERENCES public.employees(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_lsl_config_id  ON public.ldap_sync_logs (config_id);
+CREATE INDEX IF NOT EXISTS idx_lsl_started_at ON public.ldap_sync_logs (started_at);
+
+-- 7.6 DR Plans
+CREATE TABLE IF NOT EXISTS public.dr_plans (
+    id             BIGSERIAL PRIMARY KEY,
+    name           VARCHAR(255) NOT NULL,
+    description    TEXT,
+    plan_type      VARCHAR(30) NOT NULL DEFAULT 'dr'
+        CONSTRAINT drp_type_check CHECK (plan_type IN ('dr','bcp','contingency')),
+    rto_hours      NUMERIC(6,2),
+    rpo_hours      NUMERIC(6,2),
+    status         VARCHAR(30) NOT NULL DEFAULT 'draft'
+        CONSTRAINT drp_status_check CHECK (status IN ('draft','active','archived','under_review')),
+    owner_id       BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    last_tested_at TIMESTAMPTZ,
+    next_test_due  DATE,
+    created_by     BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_drp_status    ON public.dr_plans (status);
+CREATE INDEX IF NOT EXISTS idx_drp_plan_type ON public.dr_plans (plan_type);
+
+-- 7.7 DR Plan Steps
+CREATE TABLE IF NOT EXISTS public.dr_plan_steps (
+    id               BIGSERIAL PRIMARY KEY,
+    plan_id          BIGINT NOT NULL REFERENCES public.dr_plans(id) ON DELETE CASCADE,
+    step_order       INT NOT NULL,
+    title            VARCHAR(255) NOT NULL,
+    description      TEXT,
+    responsible      BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    duration_minutes INT,
+    is_critical      BOOLEAN NOT NULL DEFAULT false,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT dr_plan_steps_uq UNIQUE (plan_id, step_order)
+);
+CREATE INDEX IF NOT EXISTS idx_drps_plan_id ON public.dr_plan_steps (plan_id);
+
+-- 7.8 DR Tests
+CREATE TABLE IF NOT EXISTS public.dr_tests (
+    id                 BIGSERIAL PRIMARY KEY,
+    plan_id            BIGINT NOT NULL REFERENCES public.dr_plans(id) ON DELETE CASCADE,
+    test_type          VARCHAR(30) NOT NULL DEFAULT 'tabletop'
+        CONSTRAINT drt_type_check CHECK (test_type IN ('tabletop','walkthrough','simulation','full_test')),
+    scheduled_at       TIMESTAMPTZ NOT NULL,
+    started_at         TIMESTAMPTZ,
+    completed_at       TIMESTAMPTZ,
+    status             VARCHAR(20) NOT NULL DEFAULT 'scheduled'
+        CONSTRAINT drt_status_check CHECK (status IN ('scheduled','in_progress','completed','cancelled')),
+    rto_achieved_hours NUMERIC(6,2),
+    rpo_achieved_hours NUMERIC(6,2),
+    outcome            VARCHAR(20)
+        CONSTRAINT drt_outcome_check CHECK (outcome IN ('passed','partial','failed')),
+    notes              TEXT,
+    conducted_by       BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    created_by         BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_drt_plan_id      ON public.dr_tests (plan_id);
+CREATE INDEX IF NOT EXISTS idx_drt_status       ON public.dr_tests (status);
+CREATE INDEX IF NOT EXISTS idx_drt_scheduled_at ON public.dr_tests (scheduled_at);
+
+-- 7.9 DR Test Results
+CREATE TABLE IF NOT EXISTS public.dr_test_results (
+    id                      BIGSERIAL PRIMARY KEY,
+    test_id                 BIGINT NOT NULL REFERENCES public.dr_tests(id) ON DELETE CASCADE,
+    step_id                 BIGINT REFERENCES public.dr_plan_steps(id) ON DELETE SET NULL,
+    status                  VARCHAR(20) NOT NULL
+        CONSTRAINT drtr_status_check CHECK (status IN ('passed','failed','skipped','not_tested')),
+    actual_duration_minutes INT,
+    notes                   TEXT,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_drtr_test_id ON public.dr_test_results (test_id);
+
+-- ============================================================
+-- FASE 6: Compliance Reporting, Vendor Performance, Service Availability
+-- ISO 19770-1, ISO 20000-1, ITIL 4
+-- ============================================================
+
+-- 6.1 Compliance Frameworks
+CREATE TABLE IF NOT EXISTS public.compliance_frameworks (
+    id          BIGSERIAL PRIMARY KEY,
+    code        VARCHAR(50)  NOT NULL,
+    name        VARCHAR(255) NOT NULL,
+    version     VARCHAR(50),
+    description TEXT,
+    is_active   BOOLEAN NOT NULL DEFAULT true,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT compliance_frameworks_code_key UNIQUE (code)
+);
+CREATE INDEX IF NOT EXISTS idx_cf_is_active ON public.compliance_frameworks (is_active);
+
+-- 6.2 Compliance Controls
+CREATE TABLE IF NOT EXISTS public.compliance_controls (
+    id           BIGSERIAL PRIMARY KEY,
+    framework_id BIGINT NOT NULL REFERENCES public.compliance_frameworks(id) ON DELETE CASCADE,
+    control_code VARCHAR(100) NOT NULL,
+    name         VARCHAR(255) NOT NULL,
+    description  TEXT,
+    category     VARCHAR(100),
+    severity     VARCHAR(20)
+        CONSTRAINT cc_severity_check CHECK (severity IN ('low','medium','high','critical')),
+    is_active    BOOLEAN NOT NULL DEFAULT true,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT compliance_controls_uq UNIQUE (framework_id, control_code)
+);
+CREATE INDEX IF NOT EXISTS idx_cc_framework_id ON public.compliance_controls (framework_id);
+CREATE INDEX IF NOT EXISTS idx_cc_severity     ON public.compliance_controls (severity);
+
+-- 6.3 Compliance Evidence
+CREATE TABLE IF NOT EXISTS public.compliance_evidence (
+    id            BIGSERIAL PRIMARY KEY,
+    control_id    BIGINT NOT NULL REFERENCES public.compliance_controls(id) ON DELETE CASCADE,
+    entity_type   VARCHAR(50) NOT NULL
+        CONSTRAINT ce_entity_type_check CHECK (entity_type IN (
+            'asset','ticket','change_request','service_request','audit_session','license'
+        )),
+    entity_id     BIGINT NOT NULL,
+    evidence_type VARCHAR(50) NOT NULL
+        CONSTRAINT ce_evidence_type_check CHECK (evidence_type IN (
+            'document','screenshot','log','report','config','test_result'
+        )),
+    title         VARCHAR(255) NOT NULL,
+    description   TEXT,
+    file_url      TEXT,
+    status        VARCHAR(30) NOT NULL DEFAULT 'pending'
+        CONSTRAINT ce_status_check CHECK (status IN ('pending','accepted','rejected','expired')),
+    reviewed_by   BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    reviewed_at   TIMESTAMPTZ,
+    expires_at    TIMESTAMPTZ,
+    submitted_by  BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ce_control_id ON public.compliance_evidence (control_id);
+CREATE INDEX IF NOT EXISTS idx_ce_status     ON public.compliance_evidence (status);
+CREATE INDEX IF NOT EXISTS idx_ce_entity     ON public.compliance_evidence (entity_type, entity_id);
+
+-- 6.4 v_asset_disposal_compliance
+CREATE OR REPLACE VIEW public.v_asset_disposal_compliance AS
+SELECT
+    a.id                    AS asset_id,
+    a.name                  AS asset_name,
+    a.asset_tag,
+    a.lifecycle_stage,
+    d.id                    AS disposal_record_id,
+    d.disposal_method,
+    d.data_wipe_completed,
+    d.environmental_compliant,
+    d.certificate_number,
+    d.date_disposed,
+    auth.name               AS authorized_by,
+    exec.name               AS executed_by,
+    CASE
+        WHEN d.id IS NULL                  THEN 'missing_record'
+        WHEN NOT d.data_wipe_completed     THEN 'data_wipe_pending'
+        WHEN NOT d.environmental_compliant THEN 'env_non_compliant'
+        ELSE 'compliant'
+    END                     AS compliance_status
+FROM public.assets a
+LEFT JOIN public.asset_disposal_records d   ON d.asset_id  = a.id
+LEFT JOIN public.employees auth ON auth.id = d.authorization_by
+LEFT JOIN public.employees exec ON exec.id  = d.executed_by
+WHERE a.lifecycle_stage IN ('disposal_pending','disposal_approved','disposed')
+   OR d.id IS NOT NULL;
+
+-- 6.5 Vendor Performance
+CREATE TABLE IF NOT EXISTS public.vendor_performance (
+    id                  BIGSERIAL PRIMARY KEY,
+    vendor_name         VARCHAR(255) NOT NULL,
+    contract_id         BIGINT REFERENCES public.contracts(id) ON DELETE SET NULL,
+    period_start        DATE NOT NULL,
+    period_end          DATE NOT NULL,
+    sla_compliance_pct  NUMERIC(5,2),
+    avg_response_hours  NUMERIC(7,2),
+    total_tickets       INT NOT NULL DEFAULT 0,
+    open_tickets        INT NOT NULL DEFAULT 0,
+    critical_incidents  INT NOT NULL DEFAULT 0,
+    nps_score           INT CHECK (nps_score BETWEEN -100 AND 100),
+    notes               TEXT,
+    recorded_by         BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_vp_vendor_name  ON public.vendor_performance (vendor_name);
+CREATE INDEX IF NOT EXISTS idx_vp_period_start ON public.vendor_performance (period_start);
+CREATE INDEX IF NOT EXISTS idx_vp_contract_id  ON public.vendor_performance (contract_id);
+
+-- 6.6 Service Availability (availability_pct = generated stored column)
+CREATE TABLE IF NOT EXISTS public.service_availability (
+    id                       BIGSERIAL PRIMARY KEY,
+    service_code             TEXT NOT NULL REFERENCES public.services(code) ON DELETE CASCADE,
+    period_start             TIMESTAMPTZ NOT NULL,
+    period_end               TIMESTAMPTZ NOT NULL,
+    downtime_minutes         INT NOT NULL DEFAULT 0,
+    planned_downtime_minutes INT NOT NULL DEFAULT 0,
+    incident_count           INT NOT NULL DEFAULT 0,
+    availability_pct         NUMERIC(7,4) GENERATED ALWAYS AS (
+        ROUND(
+            (1.0 - downtime_minutes::NUMERIC /
+             NULLIF(EXTRACT(EPOCH FROM (period_end - period_start)) / 60.0, 0)
+            ) * 100, 4
+        )
+    ) STORED,
+    notes                    TEXT,
+    recorded_by              BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_sa_service_code ON public.service_availability (service_code);
+CREATE INDEX IF NOT EXISTS idx_sa_period_start ON public.service_availability (period_start);
+
+-- Seed framework ISO/ITIL
+INSERT INTO public.compliance_frameworks (code, name, version, description)
+VALUES
+    ('ISO19770-1',  'ISO/IEC 19770-1 Software Asset Management', '2017', 'Kerangka SAM untuk pengelolaan lisensi software'),
+    ('ISO19770-2',  'ISO/IEC 19770-2 Software Identification Tags (SWID)', '2015', 'Standar tagging identifikasi software'),
+    ('ISO19770-10', 'ISO/IEC 19770-10 Overview and Vocabulary', '2015', 'Lifecycle aset IT termasuk disposal'),
+    ('ISO20000-1',  'ISO/IEC 20000-1 IT Service Management', '2018', 'ITSM standar internasional'),
+    ('ITIL4',       'ITIL 4 Framework', '2019', 'Best practice ITSM: Incident, Problem, Change, Service Request Management')
+ON CONFLICT (code) DO NOTHING;
+
+-- ============================================================
+-- FASE 5: ITAM Enhancement — Asset Specifications, SAM, Disposal
+-- ISO 19770-1 (SAM), ISO 19770-2 (SWID), ISO 19770-10 (Lifecycle)
+-- ============================================================
+
+-- 5.1 Extend lifecycle_stage enum on assets table
+ALTER TABLE public.assets DROP CONSTRAINT IF EXISTS assets_lifecycle_stage_check;
+ALTER TABLE public.assets
+    ADD CONSTRAINT assets_lifecycle_stage_check
+    CHECK (lifecycle_stage IS NULL OR lifecycle_stage IN (
+        'planning','procurement','receiving','in_use','maintenance',
+        'retirement_pending','retired',
+        'disposal_pending','disposal_approved','disposed',
+        'under_remediation'
+    ));
+
+-- 5.2 Asset Specifications (1-to-1 with assets, ISO 19770-2 SWID)
+CREATE TABLE IF NOT EXISTS public.asset_specifications (
+    id               BIGSERIAL PRIMARY KEY,
+    asset_id         BIGINT NOT NULL REFERENCES public.assets(id) ON DELETE CASCADE,
+    -- CPU
+    cpu_model        VARCHAR(255),
+    cpu_cores        INT,
+    cpu_speed_ghz    NUMERIC(5,2),
+    -- Memory
+    ram_gb           NUMERIC(7,2),
+    ram_type         VARCHAR(50),
+    -- Storage
+    storage_gb       NUMERIC(10,2),
+    storage_type     VARCHAR(50),
+    -- Display
+    screen_size_inch NUMERIC(5,2),
+    resolution       VARCHAR(30),
+    -- Network
+    mac_address      VARCHAR(20),
+    ip_address       INET,
+    -- Firmware / OS
+    bios_version     VARCHAR(100),
+    firmware_version VARCHAR(100),
+    os_name          VARCHAR(100),
+    os_version       VARCHAR(100),
+    os_license_key   TEXT,
+    -- Physical
+    form_factor      VARCHAR(50),
+    color            VARCHAR(50),
+    weight_kg        NUMERIC(6,2),
+    -- Audit metadata
+    last_scanned_at  TIMESTAMPTZ,
+    created_by       BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT asset_specifications_asset_id_key UNIQUE (asset_id)
+);
+CREATE INDEX IF NOT EXISTS idx_asset_spec_asset_id ON public.asset_specifications (asset_id);
+
+-- 5.3 Software Usage Logs — SAM metering per license/device/user
+CREATE TABLE IF NOT EXISTS public.software_usage_logs (
+    id            BIGSERIAL PRIMARY KEY,
+    license_id    BIGINT NOT NULL REFERENCES public.licenses(id) ON DELETE CASCADE,
+    asset_id      BIGINT REFERENCES public.assets(id) ON DELETE SET NULL,
+    employee_id   BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    session_start TIMESTAMPTZ NOT NULL,
+    session_end   TIMESTAMPTZ,
+    usage_minutes INT,
+    source        VARCHAR(20) NOT NULL DEFAULT 'manual'
+        CONSTRAINT sul_source_check CHECK (source IN ('manual','agent','import','sccm','jamf')),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_sul_license_id   ON public.software_usage_logs (license_id);
+CREATE INDEX IF NOT EXISTS idx_sul_asset_id     ON public.software_usage_logs (asset_id);
+CREATE INDEX IF NOT EXISTS idx_sul_employee_id  ON public.software_usage_logs (employee_id);
+CREATE INDEX IF NOT EXISTS idx_sul_session_start ON public.software_usage_logs (session_start);
+
+-- 5.4 License Reconciliation View (SAM — ISO 19770-1)
+CREATE OR REPLACE VIEW public.v_license_reconciliation AS
+SELECT
+    l.id                                          AS license_id,
+    l.name                                        AS license_name,
+    l.license_type,
+    l.license_model,
+    l.quantity                                    AS entitled_seats,
+    COALESCE(
+        (SELECT count(*) FROM public.asset_software_installations asi
+         WHERE asi.license_id = l.id AND asi.uninstalled_at IS NULL), 0
+    )::INT                                        AS installed_seats,
+    l.quantity - COALESCE(
+        (SELECT count(*) FROM public.asset_software_installations asi
+         WHERE asi.license_id = l.id AND asi.uninstalled_at IS NULL), 0
+    )::INT                                        AS available_seats,
+    CASE
+        WHEN l.quantity = COALESCE(
+            (SELECT count(*) FROM public.asset_software_installations asi
+             WHERE asi.license_id = l.id AND asi.uninstalled_at IS NULL), 0)
+            THEN 'compliant'
+        WHEN l.quantity < COALESCE(
+            (SELECT count(*) FROM public.asset_software_installations asi
+             WHERE asi.license_id = l.id AND asi.uninstalled_at IS NULL), 0)
+            THEN 'under_licensed'
+        ELSE 'over_licensed'
+    END                                           AS reconciliation_status,
+    l.expiration_date,
+    l.compliance_status,
+    l.vendor,
+    l.cost,
+    l.currency,
+    COALESCE(
+        (SELECT count(DISTINCT sul.employee_id) FROM public.software_usage_logs sul
+         WHERE sul.license_id = l.id AND sul.session_start >= now() - INTERVAL '90 days'), 0
+    )::INT                                        AS active_users_90d,
+    (SELECT max(sul.session_start) FROM public.software_usage_logs sul
+     WHERE sul.license_id = l.id)                AS last_used_at
+FROM public.licenses l
+WHERE l.deleted_at IS NULL;
+
+-- 5.5 Asset Disposal Records — regulatory compliance (RoHS/WEEE, ISO 19770-10)
+CREATE TABLE IF NOT EXISTS public.asset_disposal_records (
+    id                      BIGSERIAL PRIMARY KEY,
+    asset_id                BIGINT NOT NULL REFERENCES public.assets(id) ON DELETE CASCADE,
+    disposal_method         VARCHAR(50) NOT NULL
+        CONSTRAINT adr_method_check CHECK (disposal_method IN (
+            'resell','recycle','destroy','donate','return_to_vendor','write_off'
+        )),
+    data_wipe_method        VARCHAR(100),
+    data_wipe_completed     BOOLEAN NOT NULL DEFAULT false,
+    certificate_number      VARCHAR(100),
+    certificate_url         TEXT,
+    environmental_compliant BOOLEAN NOT NULL DEFAULT false,
+    regulatory_notes        TEXT,
+    vendor                  VARCHAR(255),
+    disposal_value          NUMERIC(15,2),
+    authorization_by        BIGINT NOT NULL REFERENCES public.employees(id),
+    executed_by             BIGINT REFERENCES public.employees(id),
+    date_disposed           DATE NOT NULL,
+    created_by              BIGINT REFERENCES public.employees(id) ON DELETE SET NULL,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_adr_asset_id      ON public.asset_disposal_records (asset_id);
+CREATE INDEX IF NOT EXISTS idx_adr_date_disposed ON public.asset_disposal_records (date_disposed);
+CREATE INDEX IF NOT EXISTS idx_adr_env_compliant ON public.asset_disposal_records (environmental_compliant);
+
+-- ============================================================
+-- Notifications
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.notifications (
+    id          BIGSERIAL PRIMARY KEY,
+    user_id     BIGINT NOT NULL REFERENCES public.employees(id) ON DELETE CASCADE,
+    type        VARCHAR(50)  NOT NULL,
+    title       VARCHAR(255) NOT NULL,
+    message     TEXT         NOT NULL,
+    entity_type VARCHAR(50),
+    entity_id   BIGINT,
+    is_read     BOOLEAN      NOT NULL DEFAULT false,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_notif_user_id    ON public.notifications (user_id);
+CREATE INDEX IF NOT EXISTS idx_notif_is_read    ON public.notifications (user_id, is_read) WHERE is_read = false;
+CREATE INDEX IF NOT EXISTS idx_notif_created_at ON public.notifications (created_at);
 
 --
 -- PostgreSQL database dump complete

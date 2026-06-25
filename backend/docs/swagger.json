@@ -1,13 +1,54 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "API documentation for Asset \u0026 Compliance module (ISO/IEC 19770-10 Grade A)",
-        "title": "ITAM Backend API",
+        "description": "Backend API implementing ISO/IEC 19770-10 Grade A++ RBAC model",
+        "title": "IT Asset \u0026 Compliance API",
         "contact": {},
-        "version": "1.0"
+        "version": "1.1"
     },
     "basePath": "/api/v1",
     "paths": {
+        "/approvals": {
+            "get": {
+                "tags": [
+                    "Approval"
+                ],
+                "summary": "List approval history untuk suatu entitas",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "service_request atau change_request",
+                        "name": "entity_type",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "ID entitas",
+                        "name": "entity_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            },
+            "post": {
+                "tags": [
+                    "Approval"
+                ],
+                "summary": "Tambah approver ke workflow (service_request / change_request)",
+                "responses": {}
+            }
+        },
+        "/approvals/decision": {
+            "post": {
+                "tags": [
+                    "Approval"
+                ],
+                "summary": "Submit keputusan approval (approved/rejected/skipped)",
+                "responses": {}
+            }
+        },
         "/assets/compliance-export": {
             "get": {
                 "produces": [
@@ -45,6 +86,2463 @@
                             "additionalProperties": true
                         }
                     }
+                }
+            }
+        },
+        "/assets/disposals": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Asset Disposal"
+                ],
+                "summary": "List semua disposal records",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "Filter yang sudah environmental compliant",
+                        "name": "env_compliant",
+                        "in": "query"
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/assets/{id}/disposal": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Asset Disposal"
+                ],
+                "summary": "Ambil record disposal suatu aset",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Asset ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            },
+            "put": {
+                "tags": [
+                    "Asset Disposal"
+                ],
+                "summary": "Update disposal record (sertifikat, environmental compliance, dll)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Asset ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Asset Disposal"
+                ],
+                "summary": "Buat disposal record untuk aset yang akan/sudah dibuang",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Asset ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/assets/{id}/spec": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Asset Specifications"
+                ],
+                "summary": "Ambil spesifikasi hardware suatu aset",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Asset ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.AssetSpecification"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Asset Specifications"
+                ],
+                "summary": "Buat atau update spesifikasi hardware aset (upsert)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Asset ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/change-requests": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Change Management"
+                ],
+                "summary": "List semua change requests",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by type (standard/normal/emergency)",
+                        "name": "type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.ChangeRequestInfo"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Change Management"
+                ],
+                "summary": "Buat change request baru",
+                "responses": {}
+            }
+        },
+        "/change-requests/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Change Management"
+                ],
+                "summary": "Detail change request beserta approvals \u0026 tasks",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Change Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ChangeRequestDetail"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "tags": [
+                    "Change Management"
+                ],
+                "summary": "Update detail change request",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Change Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            },
+            "delete": {
+                "tags": [
+                    "Change Management"
+                ],
+                "summary": "Soft-delete change request",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Change Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/change-requests/{id}/approve": {
+            "post": {
+                "tags": [
+                    "Change Management"
+                ],
+                "summary": "Approve CR → status approved + catat approver",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Change Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/change-requests/{id}/approvers": {
+            "post": {
+                "tags": [
+                    "Change Management"
+                ],
+                "summary": "Tambah anggota CAB untuk mereview CR",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Change Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/change-requests/{id}/approvers/decision": {
+            "post": {
+                "tags": [
+                    "Change Management"
+                ],
+                "summary": "Submit keputusan CAB (approved/rejected/abstain)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Change Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/change-requests/{id}/close": {
+            "post": {
+                "tags": [
+                    "Change Management"
+                ],
+                "summary": "Tutup CR → status closed",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Change Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/change-requests/{id}/complete": {
+            "post": {
+                "tags": [
+                    "Change Management"
+                ],
+                "summary": "Tandai CR selesai diimplementasi → status implemented",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Change Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/change-requests/{id}/implement": {
+            "post": {
+                "tags": [
+                    "Change Management"
+                ],
+                "summary": "Tandai CR sedang diimplementasi → status implementing",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Change Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/change-requests/{id}/reject": {
+            "post": {
+                "tags": [
+                    "Change Management"
+                ],
+                "summary": "Tolak CR → status rejected",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Change Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/change-requests/{id}/schedule": {
+            "post": {
+                "tags": [
+                    "Change Management"
+                ],
+                "summary": "Set jadwal implementasi → status scheduled",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Change Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/change-requests/{id}/submit": {
+            "post": {
+                "tags": [
+                    "Change Management"
+                ],
+                "summary": "Submit CR dari draft → under_review / approved (standard)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Change Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/change-requests/{id}/tasks": {
+            "post": {
+                "tags": [
+                    "Change Management"
+                ],
+                "summary": "Tambah sub-task implementasi ke CR",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Change Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/change-requests/{id}/tasks/{task_id}": {
+            "put": {
+                "tags": [
+                    "Change Management"
+                ],
+                "summary": "Update status / detail task",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Change Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Task ID",
+                        "name": "task_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            },
+            "delete": {
+                "tags": [
+                    "Change Management"
+                ],
+                "summary": "Hapus task dari CR",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Change Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Task ID",
+                        "name": "task_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/change-requests/{id}/verify": {
+            "post": {
+                "tags": [
+                    "Change Management"
+                ],
+                "summary": "Verifikasi hasil CR → status verified",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Change Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/dr/plans": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "DR/BCP"
+                ],
+                "summary": "List semua DR/BCP plans",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by plan type (DR|BCP|COOP)",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search by name",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Limit",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.pagedResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "DR/BCP"
+                ],
+                "summary": "Buat DR/BCP plan baru",
+                "parameters": [
+                    {
+                        "description": "DR Plan",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.DRPlan"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.DRPlan"
+                        }
+                    }
+                }
+            }
+        },
+        "/dr/plans/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "DR/BCP"
+                ],
+                "summary": "Detail DR/BCP plan beserta langkah-langkah",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Plan ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.DRPlan"
+                        }
+                    }
+                }
+            }
+        },
+        "/dr/tests": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "DR/BCP"
+                ],
+                "summary": "List DR test records",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Filter by plan ID",
+                        "name": "plan_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Limit",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.pagedResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/escalation-rules": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Escalation"
+                ],
+                "summary": "List semua aturan eskalasi",
+                "responses": {}
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Escalation"
+                ],
+                "summary": "Buat aturan eskalasi baru",
+                "responses": {}
+            }
+        },
+        "/escalation-rules/{id}": {
+            "put": {
+                "tags": [
+                    "Escalation"
+                ],
+                "summary": "Update aturan eskalasi",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Rule ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            },
+            "delete": {
+                "tags": [
+                    "Escalation"
+                ],
+                "summary": "Hapus aturan eskalasi",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Rule ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/export/assets.xlsx": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                ],
+                "tags": [
+                    "Export"
+                ],
+                "summary": "Export daftar asset ke Excel",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    }
+                }
+            }
+        },
+        "/export/audit-logs.xlsx": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                ],
+                "tags": [
+                    "Export"
+                ],
+                "summary": "Export audit log ke Excel (maks 5000 baris terbaru)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    }
+                }
+            }
+        },
+        "/export/licenses.xlsx": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                ],
+                "tags": [
+                    "Export"
+                ],
+                "summary": "Export daftar lisensi ke Excel",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    }
+                }
+            }
+        },
+        "/governance/score-summary": {
+            "get": {
+                "description": "Returns average governance score and compliance rate per department",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Governance"
+                ],
+                "summary": "Get governance score summary",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/governance/trend": {
+            "get": {
+                "description": "Returns monthly average governance score \u0026 compliance rate",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Governance"
+                ],
+                "summary": "Get governance trend (last 12 months)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/licenses/reconciliation": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Software Usage"
+                ],
+                "summary": "Laporan rekonsiliasi lisensi (entitlement vs aktual)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter: compliant|over_licensed|under_utilized",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/licenses/{id}/usage": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Software Usage"
+                ],
+                "summary": "List usage logs untuk suatu lisensi",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "License ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Software Usage"
+                ],
+                "summary": "Catat sesi penggunaan lisensi (manual / import)",
+                "responses": {}
+            }
+        },
+        "/notifications": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "List notifikasi milik user yang login",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Page size",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter hanya yang belum dibaca",
+                        "name": "unread",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.pagedResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/read-all": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Tandai semua notifikasi sebagai sudah dibaca",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/unread-count": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Jumlah notifikasi belum dibaca",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "integer"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Hapus notifikasi milik user sendiri",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Notification ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/{id}/read": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Tandai satu notifikasi sebagai sudah dibaca",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Notification ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/problems": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Problem Management"
+                ],
+                "summary": "List semua problems",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter known errors only",
+                        "name": "known_error",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.ProblemInfo"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Problem Management"
+                ],
+                "summary": "Buat problem baru",
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/problems/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Problem Management"
+                ],
+                "summary": "Detail problem beserta linked incidents",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Problem ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ProblemDetail"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Problem Management"
+                ],
+                "summary": "Update problem (status, RCA, workaround, dll)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Problem ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            },
+            "delete": {
+                "tags": [
+                    "Problem Management"
+                ],
+                "summary": "Soft-delete problem",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Problem ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/problems/{id}/incidents": {
+            "post": {
+                "tags": [
+                    "Problem Management"
+                ],
+                "summary": "Hubungkan ticket (incident) ke problem",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Problem ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/problems/{id}/incidents/{ticket_id}": {
+            "delete": {
+                "tags": [
+                    "Problem Management"
+                ],
+                "summary": "Putus relasi ticket dari problem",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Problem ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Ticket ID",
+                        "name": "ticket_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/service-catalog": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Service Catalog"
+                ],
+                "summary": "List service catalog yang aktif",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.ServiceCatalog"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Service Catalog"
+                ],
+                "summary": "Tambah item baru ke service catalog",
+                "responses": {}
+            }
+        },
+        "/service-catalog/{id}": {
+            "put": {
+                "tags": [
+                    "Service Catalog"
+                ],
+                "summary": "Update item service catalog",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Catalog Item ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            },
+            "delete": {
+                "tags": [
+                    "Service Catalog"
+                ],
+                "summary": "Soft-delete item service catalog",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Catalog Item ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/service-requests": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Service Request"
+                ],
+                "summary": "List semua service requests",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Hanya request milik sendiri",
+                        "name": "my",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.ServiceRequestInfo"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Service Request"
+                ],
+                "summary": "Buat service request baru",
+                "responses": {}
+            }
+        },
+        "/service-requests/{id}": {
+            "get": {
+                "tags": [
+                    "Service Request"
+                ],
+                "summary": "Detail service request beserta approval history",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Service Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            },
+            "put": {
+                "tags": [
+                    "Service Request"
+                ],
+                "summary": "Update service request (assignee, notes, dll)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Service Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            },
+            "delete": {
+                "tags": [
+                    "Service Request"
+                ],
+                "summary": "Soft-delete service request",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Service Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/service-requests/{id}/cancel": {
+            "post": {
+                "tags": [
+                    "Service Request"
+                ],
+                "summary": "Batalkan service request",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Service Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/service-requests/{id}/fulfill": {
+            "post": {
+                "tags": [
+                    "Service Request"
+                ],
+                "summary": "Tandai service request selesai dipenuhi",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Service Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/service-requests/{id}/start": {
+            "post": {
+                "tags": [
+                    "Service Request"
+                ],
+                "summary": "Mulai proses pemenuhan SR → in_fulfillment",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Service Request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/services/availability": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Vendor \u0026 Service"
+                ],
+                "summary": "List data availability layanan",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by service code",
+                        "name": "service_code",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Limit",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.pagedResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tickets/{ticket_id}/postmortem": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Post-Mortem"
+                ],
+                "summary": "Ambil post-mortem berdasarkan ticket",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Ticket ID",
+                        "name": "ticket_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Post-Mortem"
+                ],
+                "summary": "Buat post-mortem untuk incident (ticket)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Ticket ID",
+                        "name": "ticket_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/tickets/{ticket_id}/postmortem/review": {
+            "post": {
+                "tags": [
+                    "Post-Mortem"
+                ],
+                "summary": "Tandai post-mortem sudah di-review",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Ticket ID",
+                        "name": "ticket_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/vendors/performance": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Vendor \u0026 Service"
+                ],
+                "summary": "List performa vendor",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by vendor name",
+                        "name": "vendor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Limit",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.pagedResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "handlers.pagedResponse": {
+            "type": "object",
+            "properties": {
+                "data": {},
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.AssetSpecification": {
+            "type": "object",
+            "properties": {
+                "asset_id": {
+                    "type": "integer"
+                },
+                "asset_name": {
+                    "description": "Transient",
+                    "type": "string"
+                },
+                "asset_tag": {
+                    "type": "string"
+                },
+                "bios_version": {
+                    "description": "Firmware \u0026 OS",
+                    "type": "string"
+                },
+                "color": {
+                    "type": "string"
+                },
+                "cpu_cores": {
+                    "type": "integer"
+                },
+                "cpu_model": {
+                    "description": "CPU",
+                    "type": "string"
+                },
+                "cpu_speed_ghz": {
+                    "type": "number"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "integer"
+                },
+                "firmware_version": {
+                    "type": "string"
+                },
+                "form_factor": {
+                    "description": "Physical",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "ip_address": {
+                    "type": "string"
+                },
+                "last_scanned_at": {
+                    "description": "Audit",
+                    "type": "string"
+                },
+                "mac_address": {
+                    "description": "Network",
+                    "type": "string"
+                },
+                "os_license_key": {
+                    "type": "string"
+                },
+                "os_name": {
+                    "type": "string"
+                },
+                "os_version": {
+                    "type": "string"
+                },
+                "ram_gb": {
+                    "description": "Memory",
+                    "type": "number"
+                },
+                "ram_type": {
+                    "type": "string"
+                },
+                "resolution": {
+                    "type": "string"
+                },
+                "screen_size_inch": {
+                    "description": "Display",
+                    "type": "number"
+                },
+                "storage_gb": {
+                    "description": "Storage",
+                    "type": "number"
+                },
+                "storage_type": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "weight_kg": {
+                    "type": "number"
+                }
+            }
+        },
+        "models.ChangeApproval": {
+            "type": "object",
+            "properties": {
+                "approver_id": {
+                    "type": "integer"
+                },
+                "approver_name": {
+                    "description": "Transient",
+                    "type": "string"
+                },
+                "change_id": {
+                    "type": "integer"
+                },
+                "comment": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "decided_at": {
+                    "type": "string"
+                },
+                "decision": {
+                    "description": "approved | rejected | abstain | pending",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.ChangeRequestDetail": {
+            "type": "object",
+            "properties": {
+                "approval_approved": {
+                    "type": "integer"
+                },
+                "approval_total": {
+                    "type": "integer"
+                },
+                "approvals": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ChangeApproval"
+                    }
+                },
+                "approved_at": {
+                    "type": "string"
+                },
+                "approved_by": {
+                    "type": "integer"
+                },
+                "approved_by_name": {
+                    "type": "string"
+                },
+                "cab_required": {
+                    "type": "boolean"
+                },
+                "change_window_end": {
+                    "type": "string"
+                },
+                "change_window_start": {
+                    "type": "string"
+                },
+                "cr_number": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "integer"
+                },
+                "created_by_name": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "impact_assessment": {
+                    "type": "string"
+                },
+                "implemented_at": {
+                    "type": "string"
+                },
+                "related_asset_id": {
+                    "type": "integer"
+                },
+                "related_asset_name": {
+                    "type": "string"
+                },
+                "related_ticket_id": {
+                    "type": "integer"
+                },
+                "risk_level": {
+                    "type": "string"
+                },
+                "rollback_plan": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "submitted_at": {
+                    "type": "string"
+                },
+                "task_done": {
+                    "type": "integer"
+                },
+                "task_total": {
+                    "type": "integer"
+                },
+                "tasks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ChangeTask"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ChangeRequestInfo": {
+            "type": "object",
+            "properties": {
+                "approval_approved": {
+                    "type": "integer"
+                },
+                "approval_total": {
+                    "type": "integer"
+                },
+                "approved_at": {
+                    "type": "string"
+                },
+                "approved_by": {
+                    "type": "integer"
+                },
+                "approved_by_name": {
+                    "type": "string"
+                },
+                "cab_required": {
+                    "type": "boolean"
+                },
+                "change_window_end": {
+                    "type": "string"
+                },
+                "change_window_start": {
+                    "type": "string"
+                },
+                "cr_number": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "integer"
+                },
+                "created_by_name": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "implemented_at": {
+                    "type": "string"
+                },
+                "related_asset_id": {
+                    "type": "integer"
+                },
+                "related_asset_name": {
+                    "type": "string"
+                },
+                "related_ticket_id": {
+                    "type": "integer"
+                },
+                "risk_level": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "submitted_at": {
+                    "type": "string"
+                },
+                "task_done": {
+                    "type": "integer"
+                },
+                "task_total": {
+                    "type": "integer"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ChangeTask": {
+            "type": "object",
+            "properties": {
+                "assigned_to": {
+                    "type": "integer"
+                },
+                "assignee_name": {
+                    "description": "Transient",
+                    "type": "string"
+                },
+                "change_id": {
+                    "type": "integer"
+                },
+                "completed_at": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "seq_order": {
+                    "type": "integer"
+                },
+                "status": {
+                    "description": "pending | in_progress | done | skipped",
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.DRPlan": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "integer"
+                },
+                "created_by_name": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "last_tested_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "next_test_due": {
+                    "type": "string"
+                },
+                "owner_id": {
+                    "type": "integer"
+                },
+                "owner_name": {
+                    "description": "Transient",
+                    "type": "string"
+                },
+                "plan_type": {
+                    "description": "dr|bcp|contingency",
+                    "type": "string"
+                },
+                "rpo_hours": {
+                    "type": "number"
+                },
+                "rto_hours": {
+                    "type": "number"
+                },
+                "status": {
+                    "description": "draft|active|archived|under_review",
+                    "type": "string"
+                },
+                "step_count": {
+                    "type": "integer"
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.DRPlanStep"
+                    }
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.DRPlanStep": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "duration_minutes": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_critical": {
+                    "type": "boolean"
+                },
+                "plan_id": {
+                    "type": "integer"
+                },
+                "responsible": {
+                    "type": "integer"
+                },
+                "responsible_name": {
+                    "description": "Transient",
+                    "type": "string"
+                },
+                "step_order": {
+                    "type": "integer"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.IncidentPostmortem": {
+            "type": "object",
+            "properties": {
+                "action_items": {
+                    "description": "JSON array of action items",
+                    "type": "string"
+                },
+                "contributing_factors": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "integer"
+                },
+                "created_by_name": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "lessons_learned": {
+                    "type": "string"
+                },
+                "problem_id": {
+                    "type": "integer"
+                },
+                "reviewed_at": {
+                    "type": "string"
+                },
+                "reviewed_by": {
+                    "type": "integer"
+                },
+                "reviewed_by_name": {
+                    "type": "string"
+                },
+                "root_cause": {
+                    "type": "string"
+                },
+                "ticket_id": {
+                    "type": "integer"
+                },
+                "ticket_subject": {
+                    "description": "Transient join fields",
+                    "type": "string"
+                },
+                "timeline": {
+                    "description": "JSON array of timeline events",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.Problem": {
+            "type": "object",
+            "properties": {
+                "assigned_to": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "integer"
+                },
+                "deleted_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "known_error": {
+                    "type": "boolean"
+                },
+                "permanent_solution": {
+                    "type": "string"
+                },
+                "priority": {
+                    "description": "Low | Medium | High | Critical",
+                    "type": "string"
+                },
+                "related_asset_id": {
+                    "type": "integer"
+                },
+                "resolved_at": {
+                    "type": "string"
+                },
+                "root_cause": {
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Open | Under Investigation | Known Error | Resolved | Closed",
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "updated_by": {
+                    "type": "integer"
+                },
+                "workaround": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ProblemDetail": {
+            "type": "object",
+            "properties": {
+                "assigned_to": {
+                    "type": "integer"
+                },
+                "assignee_name": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "integer"
+                },
+                "created_by_name": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "incident_count": {
+                    "type": "integer"
+                },
+                "known_error": {
+                    "type": "boolean"
+                },
+                "linked_incidents": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ProblemIncident"
+                    }
+                },
+                "permanent_solution": {
+                    "type": "string"
+                },
+                "postmortem": {
+                    "$ref": "#/definitions/models.IncidentPostmortem"
+                },
+                "priority": {
+                    "type": "string"
+                },
+                "related_asset_id": {
+                    "type": "integer"
+                },
+                "related_asset_name": {
+                    "type": "string"
+                },
+                "resolved_at": {
+                    "type": "string"
+                },
+                "root_cause": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "workaround": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ProblemIncident": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "linked_at": {
+                    "type": "string"
+                },
+                "linked_by": {
+                    "type": "integer"
+                },
+                "linked_by_name": {
+                    "type": "string"
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "problem_id": {
+                    "type": "integer"
+                },
+                "ticket_id": {
+                    "type": "integer"
+                },
+                "ticket_priority": {
+                    "type": "string"
+                },
+                "ticket_status": {
+                    "type": "string"
+                },
+                "ticket_subject": {
+                    "description": "Transient join fields",
+                    "type": "string"
+                }
+            }
+        },
+        "models.ProblemInfo": {
+            "type": "object",
+            "properties": {
+                "assigned_to": {
+                    "type": "integer"
+                },
+                "assignee_name": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "integer"
+                },
+                "created_by_name": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "incident_count": {
+                    "type": "integer"
+                },
+                "known_error": {
+                    "type": "boolean"
+                },
+                "priority": {
+                    "type": "string"
+                },
+                "related_asset_id": {
+                    "type": "integer"
+                },
+                "related_asset_name": {
+                    "type": "string"
+                },
+                "resolved_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ServiceCatalog": {
+            "type": "object",
+            "properties": {
+                "approval_required": {
+                    "type": "boolean"
+                },
+                "category": {
+                    "type": "string"
+                },
+                "code": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "integer"
+                },
+                "created_by_name": {
+                    "type": "string"
+                },
+                "deleted_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "fulfillment_sla_minutes": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "sla_policy_id": {
+                    "type": "integer"
+                },
+                "sla_policy_name": {
+                    "description": "Transient",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ServiceRequestInfo": {
+            "type": "object",
+            "properties": {
+                "approval_required": {
+                    "type": "boolean"
+                },
+                "assigned_to": {
+                    "type": "integer"
+                },
+                "assigned_to_name": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "department_id": {
+                    "type": "integer"
+                },
+                "department_name": {
+                    "type": "string"
+                },
+                "fulfilled_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "pending_approvals": {
+                    "type": "integer"
+                },
+                "priority": {
+                    "type": "string"
+                },
+                "related_asset_id": {
+                    "type": "integer"
+                },
+                "related_asset_name": {
+                    "type": "string"
+                },
+                "requested_by": {
+                    "type": "integer"
+                },
+                "requested_by_name": {
+                    "type": "string"
+                },
+                "service_catalog_code": {
+                    "type": "string"
+                },
+                "service_catalog_id": {
+                    "type": "integer"
+                },
+                "service_catalog_name": {
+                    "type": "string"
+                },
+                "sr_number": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "subject": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
                 }
             }
         }

@@ -75,6 +75,14 @@ export function useWebSocket() {
               position: "top-right",
             })
           }
+
+          if (msg.type === "notification") {
+            // Dispatch a CustomEvent so NotificationBell can react
+            // without creating a second WebSocket connection.
+            window.dispatchEvent(
+              new CustomEvent("ws:notification", { detail: msg.data })
+            )
+          }
         } catch (err) {
           console.error("❌ [WS] Parse error:", err)
         }
