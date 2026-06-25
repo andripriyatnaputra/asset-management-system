@@ -20,7 +20,7 @@ SET row_security = off;
 -- Name: cdc; Type: SCHEMA; Schema: -; Owner: admin
 --
 
-CREATE SCHEMA cdc;
+CREATE SCHEMA IF NOT EXISTS cdc;
 
 
 ALTER SCHEMA cdc OWNER TO admin;

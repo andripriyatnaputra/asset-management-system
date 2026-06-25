@@ -32,7 +32,7 @@ func TestMain(m *testing.M) {
 	os.Setenv("DATABASE_URL", "postgres://admin_test:secret_test@localhost:5433/asset_db_test?sslmode=disable")
 	database.Connect()
 
-	_, err := database.Pool.Exec(context.Background(), "DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
+	_, err := database.Pool.Exec(context.Background(), "DROP SCHEMA IF EXISTS cdc CASCADE; DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
 	if err != nil {
 		log.Fatalf("Could not clean test database: %v", err)
 	}
