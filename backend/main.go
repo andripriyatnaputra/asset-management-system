@@ -226,7 +226,7 @@ func main() {
 			// Problem Management (read — semua authenticated)
 			authenticated.GET("/problems", handlers.GetAllProblems)
 			authenticated.GET("/problems/:id", handlers.GetProblemByID)
-			authenticated.GET("/tickets/:ticket_id/postmortem", handlers.GetPostmortem)
+			authenticated.GET("/tickets/:id/postmortem", handlers.GetPostmortem)
 
 			// Escalation Rules (read)
 			authenticated.GET("/escalation-rules", handlers.GetEscalationRules)
@@ -324,8 +324,8 @@ func main() {
 			support.DELETE("/problems/:id/incidents/:ticket_id", handlers.UnlinkIncidentFromProblem)
 
 			// Post-mortem (write — support & admin)
-			support.POST("/tickets/:ticket_id/postmortem", handlers.CreatePostmortem)
-			support.POST("/tickets/:ticket_id/postmortem/review", handlers.ReviewPostmortem)
+			support.POST("/tickets/:id/postmortem", handlers.CreatePostmortem)
+			support.POST("/tickets/:id/postmortem/review", handlers.ReviewPostmortem)
 
 			// Phase 5 — Asset Specs & SAM Usage (write — support)
 			support.PUT("/assets/:id/spec", handlers.UpsertAssetSpecification)

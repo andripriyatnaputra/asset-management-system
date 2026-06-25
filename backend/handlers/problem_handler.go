@@ -377,7 +377,7 @@ func UnlinkIncidentFromProblem(c *gin.Context) {
 // @Param ticket_id path int true "Ticket ID"
 // @Router /tickets/{ticket_id}/postmortem [post]
 func CreatePostmortem(c *gin.Context) {
-	ticketID, _ := strconv.ParseInt(c.Param("ticket_id"), 10, 64)
+	ticketID, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	actor := getActorID(c)
 
 	var req struct {
@@ -433,7 +433,7 @@ func CreatePostmortem(c *gin.Context) {
 // @Param ticket_id path int true "Ticket ID"
 // @Router /tickets/{ticket_id}/postmortem [get]
 func GetPostmortem(c *gin.Context) {
-	ticketID, _ := strconv.ParseInt(c.Param("ticket_id"), 10, 64)
+	ticketID, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 
 	var pm models.IncidentPostmortem
 	err := database.Pool.QueryRow(c, `
@@ -472,7 +472,7 @@ func GetPostmortem(c *gin.Context) {
 // @Param ticket_id path int true "Ticket ID"
 // @Router /tickets/{ticket_id}/postmortem/review [post]
 func ReviewPostmortem(c *gin.Context) {
-	ticketID, _ := strconv.ParseInt(c.Param("ticket_id"), 10, 64)
+	ticketID, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	actor := getActorID(c)
 	now := time.Now()
 
