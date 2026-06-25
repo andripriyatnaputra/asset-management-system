@@ -90,7 +90,7 @@ export default function CompliancePage() {
   const fetchAuditLogs = useCallback((p: number) => {
     setIsLoading(true)
     apiClient.get(`/audit-logs?page=${p}&limit=${limit}`)
-      .then(res => { setAuditLogs(res.data.data ?? res.data ?? []); setAuditTotal(res.data.total ?? 0) })
+      .then(res => { setAuditLogs(res.data.audit_logs ?? res.data.data ?? []); setAuditTotal(res.data.total ?? 0) })
       .catch(() => toast.error('Gagal memuat audit trail'))
       .finally(() => setIsLoading(false))
   }, [])

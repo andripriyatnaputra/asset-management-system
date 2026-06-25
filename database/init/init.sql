@@ -4327,8 +4327,8 @@ SELECT
     END                     AS compliance_status
 FROM public.assets a
 LEFT JOIN public.asset_disposal_records d   ON d.asset_id  = a.id
-LEFT JOIN public.employees auth ON auth.id = d.authorization_by
-LEFT JOIN public.employees exec ON exec.id  = d.executed_by
+LEFT JOIN public.employees auth ON auth.id = d.approved_by
+LEFT JOIN public.employees exec ON exec.id  = d.disposed_by
 WHERE a.lifecycle_stage IN ('disposal_pending','disposal_approved','disposed')
    OR d.id IS NOT NULL;
 
