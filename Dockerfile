@@ -1,8 +1,8 @@
 # File: Dockerfile (di folder root)
 
 # --- Tahap 1: Build Frontend ---
-# Menggunakan image Node.js versi 18 untuk membangun aplikasi React
-FROM node:18-alpine AS frontend-builder
+# Menggunakan image Node.js versi 22 untuk membangun aplikasi React
+FROM node:22-alpine AS frontend-builder
 WORKDIR /app/frontend
 # Salin file package.json dan package-lock.json terlebih dahulu untuk caching
 COPY frontend/package*.json ./
@@ -15,8 +15,8 @@ COPY frontend/ ./
 RUN npm run build
 
 # --- Tahap 2: Build Backend ---
-# Menggunakan image Go versi 1.24 yang ringan
-FROM golang:1.24-alpine AS backend-builder
+# Menggunakan image Go versi 1.25 yang ringan
+FROM golang:1.25-alpine AS backend-builder
 WORKDIR /app
 # Salin file modul Go untuk caching dependensi
 COPY go.mod go.sum ./
