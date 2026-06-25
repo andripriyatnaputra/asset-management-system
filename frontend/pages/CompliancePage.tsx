@@ -33,13 +33,14 @@ interface DisposalCompliance {
 
 interface AuditLog {
   id: number
-  entity_type: string
+  entity_name: string
   entity_id: number
   action: string
-  changed_by?: number
-  old_values?: Record<string, unknown>
-  new_values?: Record<string, unknown>
-  changed_at: string
+  actor_id?: number
+  actor_name?: string
+  changes?: string
+  ip_address?: string
+  created_at: string
 }
 
 const DISPOSAL_STATUS_COLORS: Record<string, string> = {
@@ -255,11 +256,11 @@ export default function CompliancePage() {
                 ) : auditLogs.map(log => (
                   <TableRow key={log.id}>
                     <TableCell className="font-mono text-sm">{log.id}</TableCell>
-                    <TableCell><Badge variant="outline">{log.entity_type} #{log.entity_id}</Badge></TableCell>
+                    <TableCell><Badge variant="outline">{log.entity_name} #{log.entity_id}</Badge></TableCell>
                     <TableCell>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${ACTION_COLORS[log.action] ?? 'bg-gray-100 text-gray-600'}`}>{log.action}</span>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${ACTION_COLORS[log.action?.toUpperCase()] ?? 'bg-gray-100 text-gray-600'}`}>{log.action}</span>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{new Date(log.changed_at).toLocaleString('id-ID')}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{new Date(log.created_at).toLocaleString('id-ID')}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
