@@ -4106,33 +4106,6 @@ CREATE INDEX IF NOT EXISTS idx_ce_control_id ON public.compliance_evidence (cont
 CREATE INDEX IF NOT EXISTS idx_ce_status     ON public.compliance_evidence (status);
 CREATE INDEX IF NOT EXISTS idx_ce_entity     ON public.compliance_evidence (entity_type, entity_id);
 
--- 6.4 v_asset_disposal_compliance
-CREATE OR REPLACE VIEW public.v_asset_disposal_compliance AS
-SELECT
-    a.id                    AS asset_id,
-    a.name                  AS asset_name,
-    a.asset_tag,
-    a.lifecycle_stage,
-    d.id                    AS disposal_record_id,
-    d.disposal_method,
-    d.data_wipe_completed,
-    d.environmental_compliant,
-    d.certificate_number,
-    d.date_disposed,
-    auth.name               AS authorized_by,
-    exec.name               AS executed_by,
-    CASE
-        WHEN d.id IS NULL                  THEN 'missing_record'
-        WHEN NOT d.data_wipe_completed     THEN 'data_wipe_pending'
-        WHEN NOT d.environmental_compliant THEN 'env_non_compliant'
-        ELSE 'compliant'
-    END                     AS compliance_status
-FROM public.assets a
-LEFT JOIN public.asset_disposal_records d   ON d.asset_id  = a.id
-LEFT JOIN public.employees auth ON auth.id = d.authorization_by
-LEFT JOIN public.employees exec ON exec.id  = d.executed_by
-WHERE a.lifecycle_stage IN ('disposal_pending','disposal_approved','disposed')
-   OR d.id IS NOT NULL;
 
 -- 6.5 Vendor Performance
 CREATE TABLE IF NOT EXISTS public.vendor_performance (
@@ -4270,23 +4243,23 @@ SELECT
     l.name                                        AS license_name,
     l.license_type,
     l.license_model,
-    l.quantity                                    AS entitled_seats,
+    l.total_seats                                 AS entitled_seats,
     COALESCE(
-        (SELECT count(*) FROM public.asset_software_installations asi
-         WHERE asi.license_id = l.id AND asi.uninstalled_at IS NULL), 0
+        (SELECT count(*) FROM public.software_installations asi
+         WHERE asi.license_id = l.id AND asi.removed_at IS NULL), 0
     )::INT                                        AS installed_seats,
-    l.quantity - COALESCE(
-        (SELECT count(*) FROM public.asset_software_installations asi
-         WHERE asi.license_id = l.id AND asi.uninstalled_at IS NULL), 0
+    l.total_seats - COALESCE(
+        (SELECT count(*) FROM public.software_installations asi
+         WHERE asi.license_id = l.id AND asi.removed_at IS NULL), 0
     )::INT                                        AS available_seats,
     CASE
-        WHEN l.quantity = COALESCE(
-            (SELECT count(*) FROM public.asset_software_installations asi
-             WHERE asi.license_id = l.id AND asi.uninstalled_at IS NULL), 0)
+        WHEN l.total_seats = COALESCE(
+            (SELECT count(*) FROM public.software_installations asi
+             WHERE asi.license_id = l.id AND asi.removed_at IS NULL), 0)
             THEN 'compliant'
-        WHEN l.quantity < COALESCE(
-            (SELECT count(*) FROM public.asset_software_installations asi
-             WHERE asi.license_id = l.id AND asi.uninstalled_at IS NULL), 0)
+        WHEN l.total_seats < COALESCE(
+            (SELECT count(*) FROM public.software_installations asi
+             WHERE asi.license_id = l.id AND asi.removed_at IS NULL), 0)
             THEN 'under_licensed'
         ELSE 'over_licensed'
     END                                           AS reconciliation_status,
@@ -4330,6 +4303,34 @@ CREATE TABLE IF NOT EXISTS public.asset_disposal_records (
 CREATE INDEX IF NOT EXISTS idx_adr_asset_id      ON public.asset_disposal_records (asset_id);
 CREATE INDEX IF NOT EXISTS idx_adr_date_disposed ON public.asset_disposal_records (date_disposed);
 CREATE INDEX IF NOT EXISTS idx_adr_env_compliant ON public.asset_disposal_records (environmental_compliant);
+
+-- 6.4 v_asset_disposal_compliance (dipindah ke sini agar asset_disposal_records sudah ada)
+CREATE OR REPLACE VIEW public.v_asset_disposal_compliance AS
+SELECT
+    a.id                    AS asset_id,
+    a.name                  AS asset_name,
+    a.asset_tag,
+    a.lifecycle_stage,
+    d.id                    AS disposal_record_id,
+    d.disposal_method,
+    d.data_wipe_completed,
+    d.environmental_compliant,
+    d.certificate_number,
+    d.date_disposed,
+    auth.name               AS authorized_by,
+    exec.name               AS executed_by,
+    CASE
+        WHEN d.id IS NULL                  THEN 'missing_record'
+        WHEN NOT d.data_wipe_completed     THEN 'data_wipe_pending'
+        WHEN NOT d.environmental_compliant THEN 'env_non_compliant'
+        ELSE 'compliant'
+    END                     AS compliance_status
+FROM public.assets a
+LEFT JOIN public.asset_disposal_records d   ON d.asset_id  = a.id
+LEFT JOIN public.employees auth ON auth.id = d.authorization_by
+LEFT JOIN public.employees exec ON exec.id  = d.executed_by
+WHERE a.lifecycle_stage IN ('disposal_pending','disposal_approved','disposed')
+   OR d.id IS NOT NULL;
 
 -- ============================================================
 -- Notifications
